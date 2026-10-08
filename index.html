@@ -157,12 +157,14 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T14:10:11Z';
+const BUILD='2026-10-08T14:11:03Z';
+let updAvail=false;
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
     if(m&&m[1]!==BUILD){
-      if(!manual){let g=0;try{g=sessionStorage.getItem('nd_upd')===m[1]}catch(e){}if(g||draft||ddraft)return 'new';try{sessionStorage.setItem('nd_upd',m[1])}catch(e){}}
-      location.replace(location.pathname+'?v='+encodeURIComponent(m[1]));return 'new'}return 'same'}
+      if(!manual){if(!updAvail){updAvail=true;try{render()}catch(e){}}return 'new'}
+      location.replace(location.pathname+'?v='+encodeURIComponent(m[1]));return 'new'}
+    if(updAvail){updAvail=false;try{render()}catch(e){}}return 'same'}
   catch(e){return 'err'}
 }
 const KEY='nosso_dinheiro_v1';
@@ -696,7 +698,7 @@ function vSettings(){
   h+=`<button class="b g" style="width:100%;margin-top:8px" data-act="cadd">+ Nova categoria</button></div>
   <div class="card"><b>Sincronização</b><div class="mut" style="margin:4px 0 10px"><span class="syncdot ${sync.status}"></span> ${{ok:'Sincronizado com o celular do casal',saving:'Salvando…',offline:'Sem conexão: tudo fica salvo neste aparelho e sobe quando voltar a internet',error:'Não foi possível sincronizar agora',off:'—'}[sync.status]||''}</div>
   <div class="row" style="justify-content:flex-start;gap:8px"><button class="b" data-act="syncnow">Sincronizar agora</button><button class="b g" data-act="logout">Sair deste aparelho</button></div>
-  <div class="row" style="justify-content:flex-start;gap:8px;margin-top:8px"><button class="b" data-act="upd">Receber atualização</button><span class="mut" id="updmsg">Versão ${BUILD.slice(0,10)}</span></div></div>
+  <div class="row" style="justify-content:flex-start;gap:8px;margin-top:8px"><button class="b" data-act="upd">Receber atualização${updAvail?' <span class="tag sp">nova</span>':''}</button><span class="mut" id="updmsg">${updAvail?'<b style="color:var(--y)">Há uma versão nova disponível. Toque para atualizar.</b>':'Versão '+BUILD.slice(0,10)}</span></div></div>
   <div class="card"><b>Backup</b><div class="mut">Os dados ficam salvos neste aparelho. Exporte de vez em quando.</div>
   <div class="row" style="margin-top:8px"><button class="b" data-act="exp">Exportar</button><button class="b g" data-act="imp">Importar</button></div><input type="file" id="impf" accept=".json" hidden></div>`;
   return h;
@@ -767,7 +769,7 @@ function render(){
   $('#logo').innerHTML=tab==='liz'?'🧸':ic({res:'shield',parc:'card'}[tab]||'wallet',19);
   $('#mon').innerHTML=tab==='set'||tab==='liz'||tab==='res'||tab==='parc'?'':`<button data-act="mprev">‹</button><span>${monthName(ym)}</span><button data-act="mnext">›</button>`;
   $('#app').innerHTML={home:vHome,inc:vIncomes,liz:vLizzie,res:vReserve,parc:vDebts,gr:vCharts,set:vSettings}[tab]();
-  $('#nav').innerHTML=TABS.map(t=>`<button class="${tab===t[0]?'on':''}" data-act="tab" data-t="${t[0]}"><span>${ic(t[1],22)}${(t[0]==='liz'&&lizLow())||(t[0]==='parc'&&debtSoon())?'<em class="bdg">!</em>':''}</span>${t[2]}</button>`).join('');
+  $('#nav').innerHTML=TABS.map(t=>`<button class="${tab===t[0]?'on':''}" data-act="tab" data-t="${t[0]}"><span>${ic(t[1],22)}${(t[0]==='liz'&&lizLow())||(t[0]==='parc'&&debtSoon())||(t[0]==='set'&&updAvail)?'<em class="bdg">!</em>':''}</span>${t[2]}</button>`).join('');
   $('#fab').style.display=tab==='liz'||tab==='set'||tab==='res'||tab==='parc'?'none':'flex';
 }
 document.addEventListener('click',e=>{
@@ -856,7 +858,7 @@ document.addEventListener('input',e=>{
 $('#fab').onclick=()=>openForm();
 loadSync();
 if(sync.key){document.body.classList.remove('locked');render();setStatus(sync.dirty?'saving':'ok');pull()}else showLogin();
-setTimeout(()=>checkUpdate(false),2500);
+setTimeout(()=>checkUpdate(false),2500);setInterval(()=>checkUpdate(false),300000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate(false)});
 </script>
 </body>
 </html>
