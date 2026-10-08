@@ -156,7 +156,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T13:32:27Z';
+const BUILD='2026-10-08T13:33:56Z';
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
     if(m&&m[1]!==BUILD){
@@ -714,7 +714,7 @@ ${debtsFormHtml()}
 function repHtml(){const ol=openLoans().filter(m=>m.value-retOf(m)-(planRet(m)-(draft.id&&m.id===draft.repays?(+draft.allocs.lizzie||0):0))>0.004||m.id===draft.repays);if(!ol.length)return'';
  return `<div style="margin:-4px 0 8px"><select id="f_rp"><option value="">Dinheiro novo para a Lizzie</option>${ol.map(m=>`<option value="${m.id}" ${m.id===draft.repays?'selected':''}>Devolve empréstimo: ${brl(m.value-retOf(m))} · ${esc(m.who||'—')}</option>`).join('')}</select></div>`}
 const exTot=()=>sum((draft.extras||[]).map(x=>+x.value||0))+sum(Object.values(draft.debts||{}).map(x=>+x||0));
-function debtsFormHtml(){const l=S.debts.filter(db=>dstats(db).next||(draft.debts&&draft.debts[db.id]));if(!l.length)return'';
+function debtsFormHtml(){const l=S.debts.filter(db=>{const st=dstats(db),own=+(draft.debts||{})[db.id]||0;if(own>0)return true;return st.next&&st.remAmt-st.planned>0.004});if(!l.length)return'';
  return `<label style="margin-top:10px">Parcelas e empréstimos em andamento</label>`+l.map(db=>{const s=dstats(db);const other=s.planned-(draft.id&&draft.debts[db.id]?+draft.debts[db.id]:0);return `<div class="arow"><span>${ic('card',16)} ${esc(db.name)}<br><small class="mut">falta ${brl(Math.max(0,s.remAmt-other))} · parcela ${brl(db.pv)}</small></span><input class="fd" data-id="${db.id}" type="number" step="0.01" inputmode="decimal" value="${draft.debts[db.id]??''}"></div>`}).join('')}
 function catOpts(sel,auto){return `<option value="" ${auto?'selected':''}>Automático</option>`+S.cats.concat(AUTO.filter(a=>!S.cats.some(c=>c.id===a[0])).map(a=>({id:a[0],name:a[1]}))).map(c=>`<option value="${c.id}" ${!auto&&c.id===sel?'selected':''}>${esc(c.name)}</option>`).join('')}
 function extrasHtml(){return (draft.extras||[]).map((x,k)=>{const cid=x.auto===false?x.cat:detectCat(x.name);const cn=(cat(cid)||(AUTO.find(a=>a[0]===cid)&&{name:AUTO.find(a=>a[0]===cid)[1]})||{name:'Outros'}).name;
