@@ -156,7 +156,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T13:52:08Z';
+const BUILD='2026-10-08T13:55:04Z';
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
     if(m&&m[1]!==BUILD){
@@ -451,7 +451,7 @@ function pdSet(db){const set=new Set(Object.keys(db.paid||{}).map(Number));let v
   for(let k=1;k<=db.count;k++){if(set.has(k))continue;const v=pvOf(db,k);if(via>=v){set.add(k);via-=v}else break}return set}
 const isPd=(db,k)=>pdSet(db).has(+k);
 function dstats(db){
-  const ps=pdSet(db),pc=ps.size,rem=Math.max(0,db.count-pc),en=+db.entrada||0;
+  const ps=pdSet(db),pc=ps.size,rem=Math.max(0,db.count-pc),en=(+db.entrada||0)+(+db.prepaid||0);
   let next=null;for(let k=1;k<=db.count;k++)if(!ps.has(k)){next=k;break}
   let man=0,unp=0,all=0;for(let k=1;k<=db.count;k++){const v=pvOf(db,k);all+=v;if(db.paid&&db.paid[k])man+=v;else unp+=v}
   const via=Math.min(sum(dAl(db,true).map(a=>a.value)),unp),tot=en+all,paidAmt=Math.min(tot,en+man+via);
@@ -496,6 +496,7 @@ function vDebts(){
     <div class="bar"><i style="width:${pct}%;background:#7b2c43"></i></div>
     <div class="grid"><div class="stat"><small>Total a pagar</small><b>${brl(s.total)}</b></div><div class="stat"><small>${db.inst?'Próxima parcela':'Parcela'}</small><b>${brl(pvOf(db,Math.max(1,s.next||1)))}</b></div>
     <div class="stat"><small>Já pago</small><b class="good">${brl(s.paidAmt)}</b></div><div class="stat hl"><small>Falta pagar</small><b>${brl(s.remAmt)}</b></div></div>
+    <div class="mut" style="margin-top:8px">Entrada ${brl(+db.entrada||0)} · parcelas já pagas antes ${brl(+db.prepaid||0)} · pagas aqui ${brl(Math.max(0,s.paidAmt-(+db.entrada||0)-(+db.prepaid||0)))}</div>
     ${done?'':`<div class="mut" style="margin-top:8px">Faltam <b>${s.rem}</b> de ${db.count} parcelas · última em ${fdateFull(s.last).slice(3)}</div>
     <div style="margin-top:6px;font-weight:600;${dd<0?'color:var(--bad)':dd<=5?'color:#b9760f':''}">Próxima: parcela ${s.next}/${db.count} · ${fdateFull(s.nextDue)} · ${dueTxt(dd)}</div>`}
     <div class="row" style="margin-top:10px;flex-wrap:wrap;justify-content:flex-end">
@@ -512,20 +513,21 @@ function vDebts(){
 }
 function openDebtForm(id){
   const db=id?S.debts.find(x=>x.id===id):null;
-  ddraft=db?{id:db.id,name:db.name,kind:db.kind,total:db.total||'',ent:db.entrada||'',count:db.count,pv:db.pv,first:db.first,paidN:'',pvManual:true,inst:Array.from({length:db.count},(_,i)=>{const d=dueOf(db,i+1),v=pvOf(db,i+1);return {d,v,dm:d!==addMonths(db.first,i),vm:Math.abs(v-db.pv)>0.004}})}
-   :{name:'',kind:'carro',total:'',ent:'',count:'',pv:'',first:today(),paidN:'',pvManual:false,inst:[]};
+  ddraft=db?{id:db.id,name:db.name,kind:db.kind,total:db.total||'',ent:db.entrada||'',pre:db.prepaid||'',count:db.count,pv:db.pv,first:db.first,paidN:'',pvManual:true,inst:Array.from({length:db.count},(_,i)=>{const d=dueOf(db,i+1),v=pvOf(db,i+1);return {d,v,dm:d!==addMonths(db.first,i),vm:Math.abs(v-db.pv)>0.004}})}
+   :{name:'',kind:'carro',total:'',ent:'',pre:'',count:'',pv:'',first:today(),paidN:'',pvManual:false,inst:[]};
   $('#modal').innerHTML=`<div class="modal" data-act="closem"><div class="sheet">
   <div class="row"><b style="font-size:18px">${db?'Editar':'Nova'} compra parcelada / crédito</b><button class="b g sm" data-act="closem">Fechar</button></div>
   <label>Nome</label><input id="d_name" placeholder="Ex: Carro, empréstimo..." value="${esc(ddraft.name)}">
   <label>Tipo</label><select id="d_kind">${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${k===ddraft.kind?'selected':''}>${v}</option>`).join('')}</select>
   <div class="two"><div><label>Valor total (R$)</label><input id="d_total" type="number" step="0.01" inputmode="decimal" value="${ddraft.total}"></div>
-  <div><label>Já pago até hoje (R$)</label><input id="d_ent" type="number" step="0.01" inputmode="decimal" value="${ddraft.ent}"></div></div>
-  <div class="two"><div><label>Parcelas que ainda faltam (nº)</label><input id="d_count" type="number" inputmode="numeric" value="${ddraft.count}"></div>
-  <div><label>Valor da parcela (R$)</label><input id="d_pv" type="number" step="0.01" inputmode="decimal" value="${ddraft.pv}"></div></div>
-  <div class="two"><div><label>Vencimento da 1ª parcela</label><input id="d_first" type="date" value="${ddraft.first}"></div>
-  ${db?'<div></div>':`<div><label>Dessas, quantas já pagou? (nº, normalmente 0)</label><input id="d_paid" type="number" inputmode="numeric" value="${ddraft.paidN}"></div>`}</div>
+  <div><label>Entrada que já pagou (R$)</label><input id="d_ent" type="number" step="0.01" inputmode="decimal" value="${ddraft.ent}"></div></div>
+  <div class="two"><div><label>Parcelas que já pagou (R$)</label><input id="d_pre" type="number" step="0.01" inputmode="decimal" placeholder="Soma do que já pagou" value="${ddraft.pre}"></div>
+  <div><label>Parcelas que ainda faltam (nº)</label><input id="d_count" type="number" inputmode="numeric" value="${ddraft.count}"></div></div>
+  <div class="two"><div><label>Valor da parcela (R$)</label><input id="d_pv" type="number" step="0.01" inputmode="decimal" value="${ddraft.pv}"></div>
+  <div><label>Vencimento da 1ª parcela</label><input id="d_first" type="date" value="${ddraft.first}"></div></div>
+  ${db?'':`<label>Dessas parcelas que faltam, quantas já pagou agora? (nº, normalmente 0)</label><input id="d_paid" type="number" inputmode="numeric" value="${ddraft.paidN}">`}
   <details id="d_rowsw" style="margin-top:10px"><summary class="mut" style="cursor:pointer">Ajustar data e valor de cada parcela</summary><div id="d_rows"></div></details>
-  <div class="mut" style="margin-top:8px;font-size:12px">Em "Já pago até hoje" some a entrada e tudo o que já pagou. As parcelas abaixo são só o que ainda falta pagar.</div>
+  <div class="mut" style="margin-top:8px;font-size:12px">Entrada e parcelas que já pagou ficam registradas separadas. Os campos de parcela ("faltam", valor e datas) são só o que ainda falta pagar.</div>
   <div id="d_hint" class="mut" style="margin:10px 0"></div>
   <button class="b" style="width:100%;padding:14px" data-act="dsave">Salvar</button></div></div>`;
   drows();dhint();
@@ -533,7 +535,7 @@ function openDebtForm(id){
 function drows(){
   const d=ddraft,c=Math.min(120,Math.round(+d.count)||0),box=document.getElementById('d_rows');if(!d||!box)return;
   d.inst=Array.from({length:c},(_,i)=>d.inst[i]||{});
-  const en=+d.ent||0,t=+d.total||0;
+  const en=(+d.ent||0)+(+d.pre||0),t=+d.total||0;
   if(c&&d.first){
     const vmN=d.inst.filter(x=>x.vm).length,vmS=sum(d.inst.filter(x=>x.vm).map(x=>x.v));
     if(t>0&&!d.pvManual&&c-vmN>0){d.pv=Math.round((t-en-vmS)/(c-vmN)*100)/100;const pi=document.getElementById('d_pv');if(pi)pi.value=d.pv}
@@ -543,7 +545,7 @@ function drows(){
 }
 function dhint(){
   const e=$('#d_hint');if(!e||!ddraft)return;
-  const c=+ddraft.count||0,pv=+ddraft.pv||0,en=+ddraft.ent||0,t=+ddraft.total||0,tp=en+(ddraft.inst&&ddraft.inst.length&&ddraft.inst.every(x=>x.v>=0)?sum(ddraft.inst.map(x=>x.v)):c*pv);
+  const c=+ddraft.count||0,pv=+ddraft.pv||0,en=(+ddraft.ent||0)+(+ddraft.pre||0),t=+ddraft.total||0,tp=en+(ddraft.inst&&ddraft.inst.length&&ddraft.inst.every(x=>x.v>=0)?sum(ddraft.inst.map(x=>x.v)):c*pv);
   if(!c||!pv){e.textContent='';return}
   e.innerHTML=`Parcelas somam: <b>${brl(tp-en)}</b> · Total a pagar: ${brl(tp)}`+(t>0?(tp-t>0.5?` · acréscimo/juros de ${brl(tp-t)}`:t-tp>0.5?`<br><span class="warn">Faltam ${brl(t-tp)} para fechar o valor total (${brl(t-en)} ainda falta pagar).</span>`:'<br><span class="good">Fecha com o valor total ✓</span>'):'');
 }
@@ -558,7 +560,7 @@ function saveDebt(){
   else Object.keys(paid).forEach(k=>{if(+k>count)delete paid[k]});
   const inst=Array.from({length:count},(_,i)=>{const x=(d.inst||[])[i]||{};return {d:x.d||addMonths(d.first,i),v:x.v>0?+x.v:pv}});
   const custom=inst.some((x,i)=>x.d!==addMonths(d.first,i)||Math.abs(x.v-pv)>0.004);
-  const rec={id:d.id||uid(),name:String(d.name).trim(),kind:d.kind,count,pv,first:d.first,entrada:+d.ent||0,total:+d.total||0,paid,...(custom?{inst}:{})};
+  const rec={id:d.id||uid(),name:String(d.name).trim(),kind:d.kind,count,pv,first:d.first,entrada:+d.ent||0,prepaid:+d.pre||0,total:+d.total||0,paid,...(custom?{inst}:{})};
   if(old)S.debts=S.debts.map(x=>x.id===rec.id?rec:x);else S.debts.push(rec);
   save();$('#modal').innerHTML='';ddraft=null;render();
 }
@@ -836,19 +838,19 @@ document.addEventListener('input',e=>{
 document.addEventListener('input',e=>{
   const el=e.target;
   if(ddraft&&el.classList&&(el.classList.contains('ri-d')||el.classList.contains('ri-v'))){const x=ddraft.inst[+el.dataset.k];if(el.classList.contains('ri-d')){x.d=el.value;x.dm=true}else{x.v=+el.value||0;x.vm=true;
-    const d=ddraft,c=d.inst.length,en=+d.ent||0,t=+d.total||0,vmN=d.inst.filter(y=>y.vm).length;
+    const d=ddraft,c=d.inst.length,en=(+d.ent||0)+(+d.pre||0),t=+d.total||0,vmN=d.inst.filter(y=>y.vm).length;
     if(t>0&&!d.pvManual&&c-vmN>0){d.pv=Math.round((t-en-sum(d.inst.filter(y=>y.vm).map(y=>y.v)))/(c-vmN)*100)/100;const pi=document.getElementById('d_pv');if(pi)pi.value=d.pv;
       d.inst.forEach((y,i)=>{if(!y.vm){y.v=d.pv;const inp=document.querySelector('.ri-v[data-k="'+i+'"]');if(inp)inp.value=d.pv}})}}
   dhint();return}
   if(!ddraft||!el.id||el.id.slice(0,2)!=='d_')return;
-  const map={d_name:'name',d_kind:'kind',d_total:'total',d_ent:'ent',d_count:'count',d_pv:'pv',d_first:'first',d_paid:'paidN'},f=map[el.id];if(!f)return;
+  const map={d_name:'name',d_kind:'kind',d_total:'total',d_ent:'ent',d_pre:'pre',d_count:'count',d_pv:'pv',d_first:'first',d_paid:'paidN'},f=map[el.id];if(!f)return;
   ddraft[f]=el.value;
   if(el.id==='d_pv')ddraft.pvManual=true;
-  else if(!ddraft.pvManual&&(el.id==='d_total'||el.id==='d_ent'||el.id==='d_count')){
-    const c=+ddraft.count,t=+ddraft.total,en=+ddraft.ent||0;
+  else if(!ddraft.pvManual&&(el.id==='d_total'||el.id==='d_ent'||el.id==='d_pre'||el.id==='d_count')){
+    const c=+ddraft.count,t=+ddraft.total,en=(+ddraft.ent||0)+(+ddraft.pre||0);
     if(c>0&&t>0){ddraft.pv=Math.round((t-en)/c*100)/100;const p=$('#d_pv');if(p)p.value=ddraft.pv}
   }
-  if(['d_total','d_ent','d_count','d_pv','d_first'].includes(el.id))drows();
+  if(['d_total','d_ent','d_pre','d_count','d_pv','d_first'].includes(el.id))drows();
   dhint();
 });
 $('#fab').onclick=()=>openForm();
