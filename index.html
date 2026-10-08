@@ -346,13 +346,20 @@ function stats(list){
 function lizzieBalance(){
   const fromInc=sum(allocsOf(S.incomes).filter(a=>a.catId==='lizzie'&&a.paid).map(a=>a.value));
   const planned=sum(allocsOf(S.incomes).filter(a=>a.catId==='lizzie'&&!a.paid).map(a=>a.value));
-  const manual=sum(S.lizzieMoves.map(m=>isPos(m.type)?m.value:-m.value));
-  const open=Math.max(0,sum(S.lizzieMoves.filter(m=>m.type==='loan').map(m=>m.value))-sum(S.lizzieMoves.filter(m=>m.type==='back').map(m=>m.value)));
+  const manual=sum(S.lizzieMoves.map(m=>isPos(m.type)?m.value:isLoan(m)?-Math.max(0,m.value-(+m.ret||0)):-m.value));
+  const open=Math.max(0,sum(S.lizzieMoves.filter(isLoan).map(m=>m.value-(+m.ret||0)))-sum(S.lizzieMoves.filter(m=>m.type==='back').map(m=>m.value)));
   const cm=today().slice(0,7);
   const plannedNow=sum(allocsOf(S.incomes).filter(a=>a.catId==='lizzie'&&!a.paid&&a.inc.date.slice(0,7)<=cm).map(a=>a.value));
-  return {fromInc,planned,manual,open,plannedNow,total:fromInc+manual};
+  return {fromInc,planned,manual,open,plannedNow,nextDue:(openLoans().find(m=>m.due)||{}).due||null,total:fromInc+manual};
 }
-const LBL={in:'Guardei',out:'Gastei',loan:'Peguei emprestado',back:'Devolvi'};
+const LBL={in:'Guardei',out:'Gastei',loan:'Peguei emprestado',lent:'Emprestei a alguém',back:'Devolvi'};
+const isLoan=m=>m.type==='loan'||m.type==='lent';
+const openLoans=()=>S.lizzieMoves.filter(m=>isLoan(m)&&m.value-(+m.ret||0)>0.004).sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
+const retTxt=due=>{if(!due)return'sem data de retorno';const d=daysTo(due);return d<0?`atrasado ${-d} dia${-d>1?'s':''}`:d===0?'volta hoje':d===1?'volta amanhã':`volta em ${d} dias (${fdate(due)})`};
+function lmExtra(){
+  const sel=$('#lm_t'),e=$('#lm_extra');if(!sel||!e)return;const t=sel.value;
+  e.innerHTML=(t==='loan'||t==='lent')?`<div class="two"><div><label>${t==='lent'?'Emprestei a quem?':'Para quê usamos?'}</label><input id="lm_w" placeholder="${t==='lent'?'Ex: Maria':'Ex: conta de luz'}"></div><div><label>Previsão de retorno</label><input id="lm_due" type="date"></div></div><div class="mut" style="margin-top:6px">O valor sai do saldo agora e fica na lista "A voltar" até você marcar que voltou.</div>`:'';
+}
 const isPos=t=>t==='in'||t==='back';
 const daysLeft=()=>{const d=new Date();return new Date(d.getFullYear(),d.getMonth()+1,0).getDate()-d.getDate()};
 const lizLow=()=>lizzieBalance().total<(+S.lizzieMin||0);
@@ -361,13 +368,13 @@ function lizBanner(){
   if(!min&&b.total>=0)return'';
   const dl=daysLeft();
   const when=dl===0?'hoje é o último dia do mês':dl===1?'falta 1 dia para o fim do mês':`faltam ${dl} dias para o fim do mês`;
-  if(b.total>=min)return `<div class="card okc" data-act="tab" data-t="liz">${ic('heart',16)} Lizzie em dia: <b>${brl(b.total)}</b> guardado (mínimo ${brl(min)})${b.open>0?` · emprestado em aberto ${brl(b.open)}`:''}</div>`;
+  if(b.total>=min)return `<div class="card okc" data-act="tab" data-t="liz">${ic('heart',16)} Lizzie em dia: <b>${brl(b.total)}</b> guardado (mínimo ${brl(min)})${b.open>0?` · a voltar para a Lizzie ${brl(b.open)}${b.nextDue?' ('+retTxt(b.nextDue)+')':''}`:''}</div>`;
   const proj=b.total+b.plannedNow;
   return `<div class="alert" data-act="tab" data-t="liz"><b>${ic('alert',18)} ${b.total<0?'Saldo da Lizzie NEGATIVO':'Saldo da Lizzie abaixo do mínimo'}</b>
   <div style="font-size:24px;font-weight:800;margin:4px 0">${brl(b.total)}</div>
   <div>Mínimo ${brl(min)} · faltam <b>${brl(min-b.total)}</b></div>
   <div>Repor até o fim do mês (${when}).</div>
-  ${b.open>0?`<div>Emprestado em aberto: <b>${brl(b.open)}</b></div>`:''}
+  ${b.open>0?`<div>A voltar para a Lizzie: <b>${brl(b.open)}</b>${b.nextDue?' · '+retTxt(b.nextDue):''}</div>`:''}
   ${b.plannedNow>0?`<div>Previsto para entrar: ${brl(b.plannedNow)} ${proj>=min?'(cobre o mínimo)':'(ainda não cobre)'}</div>`:''}</div>`;
 }
 function resBalance(){
@@ -536,25 +543,47 @@ function vIncomes(){
 function vLizzie(){
   const b=lizzieBalance(),g=+S.lizzieGoal||0,min=+S.lizzieMin||0,ok=b.total>=min;
   const gp=g>0?Math.max(0,Math.min(100,b.total/g*100)):0;
-  const EM={in:'🐷',out:'🛍️',loan:'🤝',back:'💜'};
+  const EM={in:'🐷',out:'🛍️',loan:'🤝',lent:'💸',back:'💜'};
   let h=`<div class="lizhero"><span class="deco" style="top:12px;right:18px">🎀</span><span class="deco" style="top:52px;right:64px;font-size:16px">⭐</span><span class="deco" style="bottom:14px;right:22px;font-size:20px">✨</span>
    <div style="font-weight:500">🐷 Cofrinho da Lizzie</div>
    <div class="big">${brl(b.total)}</div>
    <div class="lizchip ${ok?'':'low'}">${ok?'🎉 Mínimo de '+brl(min)+' garantido':'🌱 Faltam '+brl(min-b.total)+' para o mínimo de '+brl(min)}</div>
-   ${b.open>0?`<div class="lizchip">🤝 Emprestado: ${brl(b.open)}</div>`:''}
+   ${b.open>0?`<div class="lizchip">🤝 A voltar: ${brl(b.open)}${b.nextDue?' · '+retTxt(b.nextDue):''}</div>`:''}
    ${g>0?`<div class="lizbar"><i style="width:${gp}%"></i></div><div style="font-size:13px">⭐ Meta ${brl(g)} · ${Math.round(gp)}%</div>`:''}
-  </div>
-  <div class="card"><div class="mut">Das entradas: ${brl(b.fromInc)} · Lançamentos: ${brl(b.manual)} · Ainda previsto: ${brl(b.planned)}</div></div>
+  </div>`;
+  const ol=openLoans();
+  if(ol.length){
+    h+=`<h2>A voltar para a Lizzie 🔔</h2>`;
+    ol.forEach(m=>{
+      const rem=m.value-(+m.ret||0),dd=m.due?daysTo(m.due):null,late=dd!==null&&dd<0;
+      h+=`<div class="card"><div class="lizmove"><span class="em">${m.type==='lent'?'💸':'🤝'}</span>
+       <div style="flex:1"><b>${brl(rem)}${(+m.ret>0)?` <span class="mut">de ${brl(m.value)}</span>`:''}</b>
+       <div class="mut">${m.type==='lent'?'Emprestei a':'Usamos para'} <b>${esc(m.who||'—')}</b> · ${fdate(m.date)}</div></div></div>
+       <div class="lizchip ${late?'low':''}" style="margin-top:8px">${retTxt(m.due)}</div>
+       <div class="row" style="margin-top:10px;gap:8px;align-items:flex-end"><div style="flex:1"><label style="margin:0 0 4px">Previsão de retorno</label><input type="date" value="${m.due||''}" data-act="ldue" data-id="${m.id}"></div>
+       <button class="b" style="height:46px" data-act="lret" data-id="${m.id}">${ic('check',14)} Voltou</button></div></div>`;
+    });
+  }
+  h+=`<div class="card"><div class="mut">Das entradas: ${brl(b.fromInc)} · Lançamentos: ${brl(b.manual)} · Ainda previsto: ${brl(b.planned)}</div></div>
   <div class="card"><b>Novo lançamento ✏️</b>
-   <div class="two"><div><label>Tipo</label><select id="lm_t"><option value="in">🐷 Guardei</option><option value="out">🛍️ Gastei</option><option value="loan">🤝 Peguei emprestado</option><option value="back">💜 Devolvi</option></select></div>
+   <div class="two"><div><label>Tipo</label><select id="lm_t"><option value="in">🐷 Guardei</option><option value="out">🛍️ Gastei</option><option value="loan">🤝 Peguei emprestado</option><option value="lent">💸 Emprestei a alguém</option></select></div>
    <div><label>Valor</label><input id="lm_v" type="number" step="0.01" inputmode="decimal"></div></div>
+   <div id="lm_extra"></div>
    <div class="two"><div><label>Descrição</label><input id="lm_d" placeholder="Ex: fraldas"></div>
    <div><label>Data</label><input id="lm_dt" type="date" value="${today()}"></div></div>
    <button class="b" style="margin-top:12px;width:100%;padding:13px" data-act="lmadd">Adicionar</button></div>
   <div class="card"><label style="margin-top:0">Saldo mínimo até o fim do mês 🌱</label><input id="lmin" type="number" step="0.01" inputmode="decimal" value="${S.lizzieMin||''}" data-act="lmin"><label>Meta da Lizzie ⭐ (opcional)</label><input id="lgoal" type="number" step="0.01" inputmode="decimal" value="${g||''}" data-act="lgoal"></div>`;
   const mv=[...S.lizzieMoves].sort((a,b)=>b.date.localeCompare(a.date));
-  if(mv.length){h+=`<h2>Lançamentos 📒</h2>`;mv.forEach(m=>h+=`<div class="card lizmove"><span class="em">${EM[m.type]||'✨'}</span><div style="flex:1"><b>${esc(m.desc||LBL[m.type]||'')}</b><div class="mut">${fdate(m.date)} · ${LBL[m.type]||''}</div></div>
-   <div style="text-align:right"><b class="${isPos(m.type)?'good':'warn'}">${isPos(m.type)?'+':'−'}${brl(m.value)}</b><br><button class="b d sm" style="margin-top:4px" data-act="lmdel" data-id="${m.id}">${ic('x',14)}</button></div></div>`)}
+  if(mv.length){
+    h+=`<h2>Lançamentos 📒</h2>`;
+    mv.forEach(m=>{
+      const loan=isLoan(m),back=loan&&(+m.ret||0)>0;
+      const det=loan?` · ${m.type==='lent'?'a ':'para '}${esc(m.who||'—')}${m.due?' · previsto '+fdate(m.due):''}`:'';
+      const st=loan?(m.value-(+m.ret||0)<=0.004?` · voltou${m.retDate?' em '+fdate(m.retDate):''}`:back?` · já voltou ${brl(m.ret)}`:''):'';
+      h+=`<div class="card lizmove"><span class="em">${EM[m.type]||'✨'}</span><div style="flex:1"><b>${esc(m.desc||LBL[m.type]||'')}</b><div class="mut">${fdate(m.date)} · ${LBL[m.type]||''}${det}${st}</div></div>
+       <div style="text-align:right"><b class="${isPos(m.type)?'good':'warn'}">${isPos(m.type)?'+':'−'}${brl(m.value)}</b><br><button class="b d sm" style="margin-top:4px" data-act="lmdel" data-id="${m.id}">${ic('x',14)}</button></div></div>`;
+    });
+  }
   return h;
 }
 function donut(items){
@@ -654,7 +683,8 @@ document.addEventListener('click',e=>{
   else if(a==='rec'){const i=S.incomes.find(x=>x.id===el.dataset.i);i.received=!i.received;save();render()}
   else if(a==='redist')redist();
   else if(a==='savef')saveForm();
-  else if(a==='lmadd'){const v=+$('#lm_v').value;if(!(v>0))return alert('Coloque o valor.');S.lizzieMoves.push({id:uid(),type:$('#lm_t').value,value:v,desc:$('#lm_d').value,date:$('#lm_dt').value});save();render()}
+  else if(a==='lmadd'){const v=+$('#lm_v').value;if(!(v>0))return alert('Coloque o valor.');const t=$('#lm_t').value,w=document.getElementById('lm_w'),du=document.getElementById('lm_due');if((t==='loan'||t==='lent')&&!(w&&w.value.trim()))return alert(t==='lent'?'Diga a quem você emprestou.':'Diga para que o dinheiro foi usado.');S.lizzieMoves.push({id:uid(),type:t,value:v,desc:$('#lm_d').value,date:$('#lm_dt').value,...((t==='loan'||t==='lent')?{who:w.value.trim(),due:du?du.value:'',ret:0}:{})});save();render()}
+  else if(a==='lret'){const m=S.lizzieMoves.find(x=>x.id===el.dataset.id);if(!m)return;const rem=m.value-(+m.ret||0);const inp=prompt('Quanto voltou para a Lizzie? (R$)',String(Math.round(rem*100)/100).replace('.',','));if(inp===null)return;const v=parseFloat(String(inp).replace(',','.'));if(!(v>0))return;m.ret=Math.min(m.value,(+m.ret||0)+v);if(m.ret>=m.value-0.004)m.retDate=today();save();render()}
   else if(a==='lmdel'){S.lizzieMoves=S.lizzieMoves.filter(m=>m.id!==el.dataset.id);save();render()}
   else if(a==='rmadd'){const v=+$('#rm_v').value;if(!(v>0))return alert('Coloque o valor.');S.reserveMoves.push({id:uid(),type:$('#rm_t').value,value:v,desc:$('#rm_d').value,date:$('#rm_dt').value});save();render()}
   else if(a==='rmdel'){S.reserveMoves=S.reserveMoves.filter(m=>m.id!==el.dataset.id);save();render()}
@@ -677,6 +707,8 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const el=e.target,a=el.dataset.act;
   if(a==='paid'){const i=S.incomes.find(x=>x.id===el.dataset.i);i.allocs[+el.dataset.k].paid=el.checked;save();render()}
+  else if(el.id==='lm_t')lmExtra();
+  else if(a==='ldue'){const m=S.lizzieMoves.find(x=>x.id===el.dataset.id);if(m){m.due=el.value;save();render()}}
   else if(a==='lgoal'){S.lizzieGoal=+el.value||0;save();render()}
   else if(a==='lmin'){S.lizzieMin=+el.value||0;save();render()}
   else if(a==='rgoal'){S.reserveGoal=+el.value||0;save();render()}
