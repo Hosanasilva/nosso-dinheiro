@@ -157,7 +157,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T17:28:31Z';
+const BUILD='2026-10-08T17:29:28Z';
 let updAvail=false;
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
@@ -471,6 +471,42 @@ function debtBanner(){
   const late=it.some(x=>x.dd<0);
   return `<div class="${late?'alert':'soon'}" data-act="tab" data-t="parc"><b>${ic(late?'alert':'bell',18)} ${late?'Parcela atrasada':'Parcela vencendo'}</b>${it.slice(0,4).map(x=>`<div style="margin-top:4px">${kEmoji(x.db.kind)} <b>${esc(x.db.name)}</b> · parcela ${x.s.next}/${x.db.count} · ${dueTxt(x.dd)} · ${brl(pvOf(x.db,x.s.next))}${x.over>1?` · ${x.over} atrasadas`:''}</div>`).join('')}</div>`;
 }
+
+const ESS=['aluguel','agua','luz','mercado','farmacia','saude','bebe','casa','lizzie'];
+const isEss=c=>c.ess!==undefined?!!c.ess:ESS.includes(c.id);
+function monthSummary(m){
+  const list=inMonth(m),al=allocsOf(list);
+  const got=sum(list.filter(i=>i.received).map(i=>i.value));
+  const SAVE=['lizzie','reserva'];
+  const rows={};const add=(cid,v)=>{rows[cid]=(rows[cid]||0)+v};
+  al.filter(a=>a.paid&&!SAVE.includes(a.catId)).forEach(a=>add(a.catId,a.value));
+  const lg=sum(S.lizzieMoves.filter(x=>x.type==='out'&&x.date.slice(0,7)===m).map(x=>x.value));
+  if(lg>0)add('lizzie_gasto',lg);
+  const saved=sum(al.filter(a=>a.paid&&SAVE.includes(a.catId)).map(a=>a.value));
+  const pend=sum(al.filter(a=>!a.paid&&!SAVE.includes(a.catId)).map(a=>a.value));
+  let ess=0,non=0;const eRows=[],nRows=[];
+  Object.entries(rows).forEach(([cid,v])=>{
+    const c=cid==='lizzie_gasto'?{id:cid,name:'Gastos com a Lizzie',icon:'heart',ess:true}:cat(cid);if(!c)return;
+    const r={c,v};if(isEss(c)){ess+=v;eRows.push(r)}else{non+=v;nRows.push(r)}});
+  eRows.sort((a,b)=>b.v-a.v);nRows.sort((a,b)=>b.v-a.v);
+  return {got,out:ess+non,ess,non,eRows,nRows,saved,pend,left:got-ess-non-saved}
+}
+function sumRows(rows,tot,col){return rows.map(r=>`<div style="margin:8px 0"><div class="row"><span>${ic(r.c.icon||'tag',15)} ${esc(r.c.name)}</span><span><b>${brl(r.v)}</b> <span class="mut">${tot?(Math.round(r.v/tot*1000)/10).toLocaleString('pt-BR'):0}%</span></span></div><div class="bar"><i style="width:${tot?r.v/tot*100:0}%;background:${col}"></i></div></div>`).join('')||'<div class="mut">Nada ainda.</div>'}
+function summaryCard(m){
+  const r=monthSummary(m);
+  return `<h2>Resumo de ${monthName(m)}</h2>
+  <div class="grid"><div class="stat hl"><small>Entrou</small><b>${brl(r.got)}</b></div><div class="stat"><small>Saiu (pago)</small><b>${brl(r.out)}</b></div>
+  <div class="stat"><small>Guardado (Lizzie + reserva)</small><b>${brl(r.saved)}</b></div><div class="stat"><small>Sobrou</small><b class="${r.left<0?'warn':'good'}">${brl(r.left)}</b></div></div>
+  <div class="card"><div class="row"><b>Custos essenciais</b><b>${brl(r.ess)}</b></div><div class="mut">${r.out?Math.round(r.ess/r.out*100):0}% das saídas</div>${sumRows(r.eRows,r.ess,'#7b2c43')}</div>
+  <div class="card"><div class="row"><b>Outros custos</b><b>${brl(r.non)}</b></div><div class="mut">${r.out?Math.round(r.non/r.out*100):0}% das saídas</div>${sumRows(r.nRows,r.non,'#c4a483')}</div>
+  ${r.pend>0?`<div class="mut" style="margin:6px 2px">Ainda previsto e não pago neste mês: ${brl(r.pend)}</div>`:''}`;
+}
+function sumBanner(){
+  const d=+today().slice(8,10);if(d>5)return'';const pm=shift(today().slice(0,7),-1);
+  if(!inMonth(pm).length)return'';
+  const r=monthSummary(pm);
+  return `<div class="soon" data-act="sumgo" data-m="${pm}"><b>${ic('chart',16)} Resumo de ${monthName(pm)} pronto</b><div style="margin-top:4px">Entrou ${brl(r.got)} · saiu ${brl(r.out)} · essenciais ${brl(r.ess)}. Toque para ver.</div></div>`}
+
 function lateBanner(){
   const t=today(),cm=t.slice(0,7);
   const rec=S.incomes.filter(i=>!i.received&&i.date<t).sort((a,b)=>a.date.localeCompare(b.date));
@@ -587,7 +623,7 @@ function vReserve(){
 /* ---------- views ---------- */
 function vHome(){
   const list=inMonth(ym),s=stats(list),al=allocsOf(list);
-  let h=debtBanner()+lateBanner()+resCard()+debtMonthCard()+`<div class="grid">
+  let h=sumBanner()+debtBanner()+lateBanner()+resCard()+debtMonthCard()+`<div class="grid">
    <div class="stat hl"><small>Já recebido</small><b>${brl(s.got)}</b></div>
    <div class="stat"><small>Ainda a receber</small><b>${brl(s.wait)}</b></div>
    <div class="stat"><small>Destinado</small><b>${brl(s.dest)}</b></div>
@@ -688,6 +724,7 @@ function vCharts(){
   <div class="mut"><span class="dot" style="background:#c4a483;margin-left:0"></span>entradas<span class="dot" style="background:#7b2c43"></span>já pago</div></div>`;
   const pp=S.people.map((p,k)=>({l:esc(p),v:sum(list.filter(i=>i.person===p).map(i=>i.value)),c:COLORS[k%COLORS.length]})).filter(i=>i.v>0);
   h+=`<div class="card"><b>Quem trouxe o dinheiro em ${monthName(ym)}</b>${donut(pp)}</div>`;
+  h+=summaryCard(ym);
   return h;
 }
 function vSettings(){
@@ -696,6 +733,7 @@ function vSettings(){
   <div class="card"><b>Distribuição padrão</b><div class="mut">Ao digitar um valor, o app divide assim automaticamente. Toque no ícone para trocá-lo. Soma atual: <b class="${Math.round(tp)===100?'good':'warn'}">${tp}%</b></div>`;
   S.cats.forEach(c=>h+=`<div class="arow" style="grid-template-columns:48px 1fr 80px 40px"><button class="b g sm" data-act="cicon" data-id="${c.id}" aria-label="Trocar ícone" style="height:44px">${ic(c.icon,18)}</button><input data-act="cname" data-id="${c.id}" value="${esc(c.name)}"><input data-act="cpct" data-id="${c.id}" type="number" inputmode="decimal" value="${c.pct}">${c.id==='lizzie'?'<span></span>':`<button class="b d sm" data-act="cdel" data-id="${c.id}">${ic('x',14)}</button>`}</div>`);
   h+=`<button class="b g" style="width:100%;margin-top:8px" data-act="cadd">+ Nova categoria</button></div>
+  <div class="card"><b>Custos essenciais</b><div class="mut" style="margin:2px 0 6px">Marque o que conta como essencial no resumo do mês.</div>${S.cats.filter(c=>c.id!=='reserva').map(c=>`<label class="alloc" style="cursor:pointer"><input type="checkbox" data-act="cess" data-id="${c.id}" ${isEss(c)?'checked':''}><span class="n">${ic(c.icon,15)} ${esc(c.name)}</span></label>`).join('')}</div>
   <div class="card"><b>Sincronização</b><div class="mut" style="margin:4px 0 10px"><span class="syncdot ${sync.status}"></span> ${{ok:'Sincronizado com o celular do casal',saving:'Salvando…',offline:'Sem conexão: tudo fica salvo neste aparelho e sobe quando voltar a internet',error:'Não foi possível sincronizar agora',off:'—'}[sync.status]||''}</div>
   <div class="row" style="justify-content:flex-start;gap:8px"><button class="b" data-act="syncnow">Sincronizar agora</button><button class="b g" data-act="logout">Sair deste aparelho</button></div>
   <div class="row" style="justify-content:flex-start;gap:8px;margin-top:8px"><button class="b" data-act="upd">Receber atualização${updAvail?' <span class="tag sp">nova</span>':''}</button><span class="mut" id="updmsg">${updAvail?'<b style="color:var(--y)">Há uma versão nova disponível. Toque para atualizar.</b>':'Versão '+BUILD.slice(0,10)}</span></div></div>
@@ -802,6 +840,7 @@ document.addEventListener('click',e=>{
   else if(a==='cicon'){const c=cat(el.dataset.id);c.icon=ICON_KEYS[(ICON_KEYS.indexOf(c.icon)+1)%ICON_KEYS.length];save();render()}
   else if(a==='xadd'){draft.extras.push({name:'',value:'',auto:true});document.getElementById('extras').innerHTML=extrasHtml()}
   else if(a==='xdel'){draft.extras.splice(+el.dataset.k,1);document.getElementById('extras').innerHTML=extrasHtml();if(!draft.manual)redist();else updLeft()}
+  else if(a==='sumgo'){ym=el.dataset.m;tab='gr';render();scrollTo(0,document.body.scrollHeight)}
   else if(a==='cadd'){S.cats.push({id:uid(),name:'Nova categoria',icon:'tag',pct:0});save();render()}
   else if(a==='cdel'){if(confirm('Remover categoria? Os lançamentos dela deixam de aparecer.')){S.cats=S.cats.filter(c=>c.id!==el.dataset.id);save();render()}}
   else if(a==='exp'){const b=new Blob([JSON.stringify(S)],{type:'application/json'});const l=document.createElement('a');l.href=URL.createObjectURL(b);l.download='nosso-dinheiro-backup.json';l.click()}
@@ -817,6 +856,7 @@ document.addEventListener('change',e=>{
   else if(a==='rgoal'){S.reserveGoal=+el.value||0;save();render()}
   else if(a==='dtoggle'){const db=S.debts.find(x=>x.id===el.dataset.id),k=el.dataset.k;if(el.checked)db.paid[k]=today();else delete db.paid[k];openDebt=db.id;save();render()}
   else if(a==='people'){const p=el.value.split(',').map(s=>s.trim()).filter(Boolean);if(p.length){S.people=p;save()}}
+  else if(a==='cess'){cat(el.dataset.id).ess=el.checked;save()}
   else if(a==='cname'){cat(el.dataset.id).name=el.value;save()}
   else if(a==='cpct'){cat(el.dataset.id).pct=+el.value||0;save();render()}
   else if(el.id==='impf'){const f=el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(j.cats&&j.incomes){S=j;migrate();save();render();alert('Backup importado!')}else alert('Arquivo inválido.')}catch(x){alert('Arquivo inválido.')}};r.readAsText(f)}
