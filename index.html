@@ -188,6 +188,7 @@ const defaults=()=>({
     {id:'cnpj',name:'CNPJ',icon:'building',pct:4},
     {id:'lizzie',name:'Lizzie',icon:'heart',pct:10},
     {id:'reserva',name:'Reserva de emergência',icon:'shield',pct:10},
+    {id:'infinitepay',name:'InfinitePay',icon:'card',pct:0},
     {id:'outros',name:'Outros',icon:'tag',pct:3}
   ],
   incomes:[],lizzieMoves:[],lizzieGoal:0,lizzieMin:500,reserveGoal:0,reserveMoves:[],debts:[]
@@ -207,6 +208,7 @@ function migrate(){
     const r=S.cats.find(c=>c.id==='reserva');if(r&&r.name==='Reserva')r.name='Reserva de emergência';
     S.cats.forEach(c=>{const x=d.find(z=>z.id===c.id);c.pct=x?x.pct:0});
   }
+  if(!S.cats.some(c=>c.id==='infinitepay')){const k=S.cats.findIndex(c=>c.id==='outros');S.cats.splice(k<0?S.cats.length:k,0,{id:'infinitepay',name:'InfinitePay',icon:'card',pct:0})}
   if(S.lizzieMin==null)S.lizzieMin=500;
   if(S.reserveGoal==null)S.reserveGoal=0;
   if(!Array.isArray(S.reserveMoves))S.reserveMoves=[];
