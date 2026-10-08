@@ -437,15 +437,21 @@ const addMonths=(iso,n)=>{const [y,m,d]=iso.split('-').map(Number);const t=new D
 const dueOf=(db,k)=>addMonths(db.first,k-1);
 const daysTo=iso=>{const [y,m,d]=iso.split('-').map(Number);const n=new Date();return Math.round((new Date(y,m-1,d)-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000)};
 const dueTxt=dd=>dd<0?`venceu há ${-dd} dia${-dd>1?'s':''}`:dd===0?'vence HOJE':dd===1?'vence amanhã':`vence em ${dd} dias`;
+const dAl=(db,paid)=>allocsOf(S.incomes).filter(a=>a.debtId===db.id&&!!a.paid===paid);
+function pdSet(db){const set=new Set(Object.keys(db.paid||{}).map(Number)),via=sum(dAl(db,true).map(a=>a.value));let ex=Math.floor((via+0.004)/(db.pv||1));
+  for(let k=1;k<=db.count&&ex>0;k++)if(!set.has(k)){set.add(k);ex--}return set}
+const isPd=(db,k)=>pdSet(db).has(+k);
 function dstats(db){
-  const pc=Object.keys(db.paid||{}).length,rem=Math.max(0,db.count-pc),en=+db.entrada||0;
-  let next=null;for(let k=1;k<=db.count;k++)if(!db.paid[k]){next=k;break}
-  return {pc,rem,next,paidAmt:en+pc*db.pv,remAmt:rem*db.pv,total:en+db.count*db.pv,nextDue:next?dueOf(db,next):null,last:dueOf(db,db.count)};
+  const ps=pdSet(db),pc=ps.size,rem=Math.max(0,db.count-pc),en=+db.entrada||0;
+  let next=null;for(let k=1;k<=db.count;k++)if(!ps.has(k)){next=k;break}
+  const man=Object.keys(db.paid||{}).length,via=Math.min(sum(dAl(db,true).map(a=>a.value)),Math.max(0,db.count-man)*db.pv);
+  const paidAmt=Math.min(en+db.count*db.pv,en+man*db.pv+via),tot=en+db.count*db.pv;
+  return {pc,rem,next,paidAmt,remAmt:next?Math.max(0,tot-paidAmt):0,planned:sum(dAl(db,false).map(a=>a.value)),total:tot,nextDue:next?dueOf(db,next):null,last:dueOf(db,db.count)};
 }
 function debtItems(){
   const out=[];
   S.debts.forEach(db=>{const s=dstats(db);if(!s.next)return;let over=0;
-    for(let k=1;k<=db.count;k++)if(!db.paid[k]&&daysTo(dueOf(db,k))<0)over++;
+    const ps=pdSet(db);for(let k=1;k<=db.count;k++)if(!ps.has(k)&&daysTo(dueOf(db,k))<0)over++;
     out.push({db,s,dd:daysTo(s.nextDue),over})});
   return out;
 }
@@ -458,7 +464,7 @@ function debtBanner(){
 function debtMonthCard(){
   if(!S.debts.length)return'';
   let tot=0,pend=0,n=0,np=0;
-  S.debts.forEach(db=>{for(let k=1;k<=db.count;k++)if(dueOf(db,k).slice(0,7)===ym){n++;tot+=db.pv;if(!db.paid[k]){np++;pend+=db.pv}}});
+  S.debts.forEach(db=>{const ps=pdSet(db);for(let k=1;k<=db.count;k++)if(dueOf(db,k).slice(0,7)===ym){n++;tot+=db.pv;if(!ps.has(k)){np++;pend+=db.pv}}});
   if(!n)return'';
   return `<div class="card" data-act="tab" data-t="parc" style="cursor:pointer"><div class="row"><b>${ic('card',18)} Parcelas de ${monthName(ym).split(' ')[0]}</b><span>${brl(tot)}</span></div><div class="mut">${n-np} de ${n} pagas · falta pagar ${brl(pend)}</div></div>`;
 }
@@ -468,7 +474,7 @@ function vDebts(){
   if(!all.length)return h+`<div class="card empty">Nenhuma parcela cadastrada ainda.<br>Ex.: o carro, um crédito, uma compra parcelada.</div>`;
   h+=`<div class="card"><div class="mut">Falta pagar de tudo</div><div style="font-size:26px;font-weight:800">${brl(sum(all.map(x=>x.s.remAmt)))}</div><div class="mut">${all.length} ${all.length>1?'itens em andamento':'item em andamento'}</div></div>`;
   all.forEach(({db,s})=>{
-    const pct=s.total?Math.min(100,s.paidAmt/s.total*100):0,done=!s.next,dd=done?0:daysTo(s.nextDue);
+    const ps=pdSet(db);const pct=s.total?Math.min(100,s.paidAmt/s.total*100):0,done=!s.next,dd=done?0:daysTo(s.nextDue);
     h+=`<div class="card"><div class="row"><b>${kEmoji(db.kind)} ${esc(db.name)}</b>${done?`<span class="tag ok">${ic('check',13)} quitado</span>`:`<span class="tag">${s.pc}/${db.count} pagas</span>`}</div>
     <div class="bar"><i style="width:${pct}%;background:#7b2c43"></i></div>
     <div class="grid"><div class="stat"><small>Total a pagar</small><b>${brl(s.total)}</b></div><div class="stat"><small>Parcela</small><b>${brl(db.pv)}</b></div>
@@ -477,11 +483,12 @@ function vDebts(){
     <div style="margin-top:6px;font-weight:600;${dd<0?'color:var(--bad)':dd<=5?'color:#b9760f':''}">Próxima: parcela ${s.next}/${db.count} · ${fdateFull(s.nextDue)} · ${dueTxt(dd)}</div>`}
     <div class="row" style="margin-top:10px;flex-wrap:wrap;justify-content:flex-end">
      ${done?'':`<button class="b sm" data-act="dpay" data-id="${db.id}">${ic('check',14)} Paguei a parcela ${s.next}</button>`}
-     ${s.pc?`<button class="b g sm" data-act="dundo" data-id="${db.id}">Desfazer última</button>`:''}
+     ${s.planned>0?`<div class="mut" style="width:100%;text-align:right">🔗 ${brl(s.planned)} já separado numa entrada</div>`:''}
+     ${Object.keys(db.paid||{}).length?`<button class="b g sm" data-act="dundo" data-id="${db.id}">Desfazer última</button>`:''}
      <button class="b g sm" data-act="dedit" data-id="${db.id}">Editar</button>
      <button class="b d sm" data-act="ddel" data-id="${db.id}">Apagar</button></div>
     <details ${openDebt===db.id?'open':''} style="margin-top:8px"><summary class="mut" style="cursor:pointer">Ver todas as parcelas</summary>
-     ${Array.from({length:db.count},(_,i)=>i+1).map(k=>`<label class="inst ${db.paid[k]?'paid':''}"><input type="checkbox" data-act="dtoggle" data-id="${db.id}" data-k="${k}" ${db.paid[k]?'checked':''}><span style="flex:1">${k}/${db.count} · vence ${fdateFull(dueOf(db,k))}</span><span class="mut">${db.paid[k]?'pago em '+fdateFull(db.paid[k]):brl(db.pv)}</span></label>`).join('')}
+     ${Array.from({length:db.count},(_,i)=>i+1).map(k=>`<label class="inst ${ps.has(k)?'paid':''}"><input type="checkbox" data-act="dtoggle" data-id="${db.id}" data-k="${k}" ${ps.has(k)?'checked':''} ${ps.has(k)&&!db.paid[k]?'disabled':''}><span style="flex:1">${k}/${db.count} · vence ${fdateFull(dueOf(db,k))}</span><span class="mut">${db.paid[k]?'pago em '+fdateFull(db.paid[k]):brl(db.pv)}</span></label>`).join('')}
     </details></div>`;
   });
   return h;
@@ -662,8 +669,8 @@ function vSettings(){
 /* ---------- modal ---------- */
 function openForm(id){
   const i=id?S.incomes.find(x=>x.id===id):null;
-  draft=i?{id:i.id,person:i.person,source:i.source,value:i.value,date:i.date,received:i.received,special:i.special,manual:true,repays:(i.allocs.find(a=>a.repays)||{}).repays||'',outroLabel:(i.allocs.find(a=>a.o)||{}).label||'',allocs:Object.fromEntries(i.allocs.filter(a=>!a.label||a.o).map(a=>[a.catId,a.value])),paid:Object.fromEntries(i.allocs.filter(a=>!a.label||a.o).map(a=>[a.catId,a.paid])),extras:i.allocs.filter(a=>a.label&&!a.o).map(a=>({name:a.label,value:a.value,cat:a.catId,auto:!!a.auto,paid:!!a.paid}))}
-   :{person:S.people[0],source:'',value:'',date:today(),received:true,special:false,manual:true,allocs:{},paid:{},extras:[],outroLabel:'',repays:''};
+  draft=i?{id:i.id,person:i.person,source:i.source,value:i.value,date:i.date,received:i.received,special:i.special,manual:true,repays:(i.allocs.find(a=>a.repays)||{}).repays||'',debts:Object.fromEntries(i.allocs.filter(a=>a.debtId).map(a=>[a.debtId,a.value])),dpaid:Object.fromEntries(i.allocs.filter(a=>a.debtId).map(a=>[a.debtId,a.paid])),outroLabel:(i.allocs.find(a=>a.o)||{}).label||'',allocs:Object.fromEntries(i.allocs.filter(a=>!a.debtId&&(!a.label||a.o)).map(a=>[a.catId,a.value])),paid:Object.fromEntries(i.allocs.filter(a=>!a.debtId&&(!a.label||a.o)).map(a=>[a.catId,a.paid])),extras:i.allocs.filter(a=>a.label&&!a.o&&!a.debtId).map(a=>({name:a.label,value:a.value,cat:a.catId,auto:!!a.auto,paid:!!a.paid}))}
+   :{person:S.people[0],source:'',value:'',date:today(),received:true,special:false,manual:true,allocs:{},paid:{},extras:[],outroLabel:'',repays:'',debts:{},dpaid:{}};
   drawForm();
 }
 function drawForm(){
@@ -678,6 +685,7 @@ function drawForm(){
   <div><label>Tipo</label><select id="f_sp"><option value="0" ${!d.special?'selected':''}>Normal</option><option value="1" ${d.special?'selected':''}>Valor especial</option></select></div></div>
   <label>Para onde vai</label>
   ${S.cats.map(c=>`<div class="arow"><span>${ic(c.icon,16)} ${esc(c.name)}</span><input class="fa" data-id="${c.id}" type="number" step="0.01" inputmode="decimal" value="${d.allocs[c.id]??''}"></div>${c.id==='lizzie'?repHtml():''}${c.id==='outros'?`<input id="f_ol" placeholder="Outro o quê? Ex: cartão da Maria" value="${esc(d.outroLabel||'')}" style="margin:-4px 0 8px">`:''}`).join('')}
+${debtsFormHtml()}
   <label style="margin-top:10px">Outra conta (o app escolhe a categoria)</label>
   <div id="extras">${extrasHtml()}</div>
   <button class="b g sm" style="margin:6px 0" data-act="xadd">${ic('plus',14)} Adicionar outra conta</button>
@@ -688,7 +696,9 @@ function drawForm(){
 }
 function repHtml(){const ol=openLoans().filter(m=>m.value-retOf(m)-(planRet(m)-(draft.id&&m.id===draft.repays?(+draft.allocs.lizzie||0):0))>0.004||m.id===draft.repays);if(!ol.length)return'';
  return `<div style="margin:-4px 0 8px"><select id="f_rp"><option value="">Dinheiro novo para a Lizzie</option>${ol.map(m=>`<option value="${m.id}" ${m.id===draft.repays?'selected':''}>Devolve empréstimo: ${brl(m.value-retOf(m))} · ${esc(m.who||'—')}</option>`).join('')}</select></div>`}
-const exTot=()=>sum((draft.extras||[]).map(x=>+x.value||0));
+const exTot=()=>sum((draft.extras||[]).map(x=>+x.value||0))+sum(Object.values(draft.debts||{}).map(x=>+x||0));
+function debtsFormHtml(){const l=S.debts.filter(db=>dstats(db).next||(draft.debts&&draft.debts[db.id]));if(!l.length)return'';
+ return `<label style="margin-top:10px">Parcelas e empréstimos em andamento</label>`+l.map(db=>{const s=dstats(db);const other=s.planned-(draft.id&&draft.debts[db.id]?+draft.debts[db.id]:0);return `<div class="arow"><span>${ic('card',16)} ${esc(db.name)}<br><small class="mut">falta ${brl(Math.max(0,s.remAmt-other))} · parcela ${brl(db.pv)}</small></span><input class="fd" data-id="${db.id}" type="number" step="0.01" inputmode="decimal" value="${draft.debts[db.id]??''}"></div>`}).join('')}
 function catOpts(sel,auto){return `<option value="" ${auto?'selected':''}>Automático</option>`+S.cats.concat(AUTO.filter(a=>!S.cats.some(c=>c.id===a[0])).map(a=>({id:a[0],name:a[1]}))).map(c=>`<option value="${c.id}" ${!auto&&c.id===sel?'selected':''}>${esc(c.name)}</option>`).join('')}
 function extrasHtml(){return (draft.extras||[]).map((x,k)=>{const cid=x.auto===false?x.cat:detectCat(x.name);const cn=(cat(cid)||(AUTO.find(a=>a[0]===cid)&&{name:AUTO.find(a=>a[0]===cid)[1]})||{name:'Outros'}).name;
  return `<div class="arow" style="grid-template-columns:1fr 90px 34px"><input class="xn" data-k="${k}" placeholder="Ex: pizza" value="${esc(x.name)}"><input class="xv" data-k="${k}" type="number" step="0.01" inputmode="decimal" value="${x.value||''}"><button class="b d sm" data-act="xdel" data-k="${k}" aria-label="Remover">${ic('x',14)}</button>
@@ -706,6 +716,7 @@ function redist(){
 function saveForm(){
   const d=draft;if(!(+d.value>0)){alert('Coloque o valor.');return}
   const allocs=S.cats.filter(c=>+d.allocs[c.id]>0).map(c=>({catId:c.id,value:+d.allocs[c.id],paid:!!d.paid[c.id],...(c.id==='lizzie'&&d.repays?{repays:d.repays}:{}),...(c.id==='outros'&&(d.outroLabel||'').trim()?{label:d.outroLabel.trim(),o:1}:{})}));
+  Object.entries(d.debts||{}).filter(([id,v])=>+v>0&&S.debts.some(x=>x.id===id)).forEach(([id,v])=>{if(!S.cats.some(c=>c.id==='parcelas'))S.cats.push({id:'parcelas',name:'Parcelas',icon:'card',pct:0});const db=S.debts.find(x=>x.id===id);allocs.push({catId:'parcelas',value:+v,paid:!!(d.dpaid||{})[id],debtId:id,label:db.name})});
   (d.extras||[]).filter(x=>+x.value>0).forEach(x=>{const cid=x.auto===false&&x.cat?x.cat:detectCat(x.name);ensureCat(cid);allocs.push({catId:cid,value:+x.value,paid:!!x.paid,label:(x.name||'').trim()||'Outra conta',...(x.auto===false?{}:{auto:1})})});
   const rec={id:d.id||uid(),person:d.person,source:d.source,value:+d.value,date:d.date,received:d.received,special:d.special,allocs};
   if(d.id)S.incomes=S.incomes.map(x=>x.id===d.id?rec:x);else S.incomes.push(rec);
@@ -781,6 +792,7 @@ document.addEventListener('input',e=>{
   else if(el.id==='f_ol')draft.outroLabel=el.value;
   else if(el.id==='f_r')draft.received=el.value==='1';
   else if(el.id==='f_sp')draft.special=el.value==='1';
+  else if(el.classList.contains('fd')){draft.manual=true;draft.debts[el.dataset.id]=+el.value||0;updLeft()}
   else if(el.classList.contains('xn')){const x=draft.extras[+el.dataset.k];x.name=el.value;const r=document.getElementById('extras');r.innerHTML=extrasHtml()}
   else if(el.classList.contains('xv')){draft.extras[+el.dataset.k].value=+el.value||0;if(!draft.manual)redist();else updLeft()}
   else if(el.classList.contains('xc')){const x=draft.extras[+el.dataset.k];if(el.value){x.auto=false;x.cat=el.value}else x.auto=true;document.getElementById('extras').innerHTML=extrasHtml()}
