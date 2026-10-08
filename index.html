@@ -157,7 +157,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T14:06:41Z';
+const BUILD='2026-10-08T14:10:11Z';
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
     if(m&&m[1]!==BUILD){
@@ -668,23 +668,24 @@ function vLizzie(){
   return h;
 }
 function donut(items){
+  items=[...items].sort((a,b)=>b.v-a.v);
   const tot=sum(items.map(i=>i.v));if(!tot)return'<div class="empty">Sem dados neste mês.</div>';
   let off=0;const R=60,C=2*Math.PI*R;
   const arcs=items.map(i=>{const len=i.v/tot*C;const s=`<circle r="${R}" cx="80" cy="80" fill="none" stroke="${i.c}" stroke-width="30" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 80 80)"/>`;off+=len;return s}).join('');
   return `<div class="donutwrap"><svg width="160" height="160" viewBox="0 0 160 160">${arcs}<text x="80" y="78" text-anchor="middle" font-size="11" fill="#8a7f60">total</text><text x="80" y="95" text-anchor="middle" font-size="13" font-weight="700" fill="#3a3320">${brl(tot)}</text></svg>
-  <div class="legend">${items.map(i=>`<div><i style="background:${i.c}"></i>${i.l} · ${Math.round(i.v/tot*100)}% · ${brl(i.v)}</div>`).join('')}</div></div>`;
+  <div class="legend">${items.map(i=>`<div><i style="background:${i.c}"></i>${i.l} · <b>${brl(i.v)}</b> · ${(Math.round(i.v/tot*1000)/10).toLocaleString('pt-BR')}%</div>`).join('')}</div></div>`;
 }
 function vCharts(){
   const list=inMonth(ym),al=allocsOf(list);
   const items=S.cats.map(c=>({l:ic(c.icon,16)+' '+esc(c.name),v:sum(al.filter(a=>a.catId===c.id).map(a=>a.value)),c:color(c.id)})).filter(i=>i.v>0);
-  let h=`<div class="card"><b>Destino do dinheiro em ${monthName(ym)}</b>${donut(items)}</div>`;
+  let h=`<div class="card"><b>Destino do dinheiro em ${monthName(ym)}</b><div class="mut">Cada % é o valor da categoria dividido pela soma de tudo que foi destinado no mês (todas as entradas juntas).</div>${donut(items)}</div>`;
   const ms=[];for(let k=-5;k<=0;k++)ms.push(shift(ym,k));
   const data=ms.map(m=>{const l=inMonth(m);return {m,inc:sum(l.map(i=>i.value)),paid:sum(allocsOf(l).filter(a=>a.paid).map(a=>a.value))}});
   const mx=Math.max(1,...data.map(d=>Math.max(d.inc,d.paid)));
   h+=`<div class="card"><b>Entradas × pago (6 meses)</b><div class="cols">${data.map(d=>`<div class="col"><div class="pair"><i style="height:${d.inc/mx*100}%;background:#c4a483"></i><i style="height:${d.paid/mx*100}%;background:#7b2c43"></i></div><div>${new Date(d.m+'-15').toLocaleDateString('pt-BR',{month:'short'})}</div></div>`).join('')}</div>
   <div class="mut"><span class="dot" style="background:#c4a483;margin-left:0"></span>entradas<span class="dot" style="background:#7b2c43"></span>já pago</div></div>`;
   const pp=S.people.map((p,k)=>({l:esc(p),v:sum(list.filter(i=>i.person===p).map(i=>i.value)),c:COLORS[k%COLORS.length]})).filter(i=>i.v>0);
-  h+=`<div class="card"><b>Quem trouxe o dinheiro</b>${donut(pp)}</div>`;
+  h+=`<div class="card"><b>Quem trouxe o dinheiro em ${monthName(ym)}</b>${donut(pp)}</div>`;
   return h;
 }
 function vSettings(){
