@@ -156,7 +156,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T13:17:38Z';
+const BUILD='2026-10-08T13:32:27Z';
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
     if(m&&m[1]!==BUILD){
@@ -469,6 +469,14 @@ function debtBanner(){
   const late=it.some(x=>x.dd<0);
   return `<div class="${late?'alert':'soon'}" data-act="tab" data-t="parc"><b>${ic(late?'alert':'bell',18)} ${late?'Parcela atrasada':'Parcela vencendo'}</b>${it.slice(0,4).map(x=>`<div style="margin-top:4px">${kEmoji(x.db.kind)} <b>${esc(x.db.name)}</b> · parcela ${x.s.next}/${x.db.count} · ${dueTxt(x.dd)} · ${brl(x.db.pv)}${x.over>1?` · ${x.over} atrasadas`:''}</div>`).join('')}</div>`;
 }
+function lateBanner(){
+  const t=today(),cm=t.slice(0,7);
+  const rec=S.incomes.filter(i=>!i.received&&i.date<t).sort((a,b)=>a.date.localeCompare(b.date));
+  const old=allocsOf(S.incomes).filter(a=>!a.paid&&a.inc.received&&a.inc.date.slice(0,7)<cm&&a.catId!=='lizzie'&&a.catId!=='reserva');
+  let h='';
+  if(rec.length)h+=`<div class="alert" data-act="tab" data-t="inc"><b>${ic('alert',18)} Recebimento atrasado</b>${rec.slice(0,4).map(i=>`<div style="margin-top:4px"><b>${esc(i.person)}</b> · ${esc(i.source||'Entrada')} · ${brl(i.value)} · era para ${fdate(i.date)} (${-daysTo(i.date)} dia${-daysTo(i.date)>1?'s':''})</div>`).join('')}</div>`;
+  if(old.length)h+=`<div class="soon" data-act="tab" data-t="inc"><b>${ic('bell',18)} Pagamentos de meses anteriores sem baixa</b><div style="margin-top:4px">${old.length} destino${old.length>1?'s':''} · ${brl(sum(old.map(a=>a.value)))} ainda não marcado${old.length>1?'s':''} como pago${old.length>1?'s':''}.</div></div>`;
+  return h}
 function debtMonthCard(){
   if(!S.debts.length)return'';
   let tot=0,pend=0,n=0,np=0;
@@ -559,7 +567,7 @@ function vReserve(){
 /* ---------- views ---------- */
 function vHome(){
   const list=inMonth(ym),s=stats(list),al=allocsOf(list);
-  let h=lizBanner()+debtBanner()+resCard()+debtMonthCard()+`<div class="grid">
+  let h=lizBanner()+debtBanner()+lateBanner()+resCard()+debtMonthCard()+`<div class="grid">
    <div class="stat hl"><small>Já recebido</small><b>${brl(s.got)}</b></div>
    <div class="stat"><small>Ainda a receber</small><b>${brl(s.wait)}</b></div>
    <div class="stat"><small>Destinado</small><b>${brl(s.dest)}</b></div>
