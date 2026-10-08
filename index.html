@@ -660,7 +660,7 @@ function vSettings(){
 function openForm(id){
   const i=id?S.incomes.find(x=>x.id===id):null;
   draft=i?{id:i.id,person:i.person,source:i.source,value:i.value,date:i.date,received:i.received,special:i.special,manual:true,allocs:Object.fromEntries(i.allocs.filter(a=>!a.label).map(a=>[a.catId,a.value])),paid:Object.fromEntries(i.allocs.filter(a=>!a.label).map(a=>[a.catId,a.paid])),extras:i.allocs.filter(a=>a.label).map(a=>({name:a.label,value:a.value,cat:a.catId,auto:!!a.auto,paid:!!a.paid}))}
-   :{person:S.people[0],source:'',value:'',date:today(),received:true,special:false,manual:false,allocs:{},paid:{},extras:[]};
+   :{person:S.people[0],source:'',value:'',date:today(),received:true,special:false,manual:true,allocs:{},paid:{},extras:[]};
   drawForm();
 }
 function drawForm(){
