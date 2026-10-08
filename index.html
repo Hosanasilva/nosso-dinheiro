@@ -94,6 +94,7 @@ body.liz nav button.on{color:#6a3fa8}
 .alert{background:#fdeceb;border:1.5px solid var(--bad);color:#7a1f14;border-radius:var(--r);padding:14px;margin:10px 0;cursor:pointer;animation:pl 1.8s ease-in-out infinite}
 @keyframes pl{50%{box-shadow:0 0 0 6px #c8493a33}}
 .soon{background:#fff6e0;border:1.5px solid #e0a43a;color:#6b4a0c;border-radius:var(--r);padding:14px;margin:10px 0;cursor:pointer}
+.alert.sm{padding:9px 12px;font-size:12.5px;margin:8px 0;line-height:1.4}.alert.sm>b:first-child{font-size:13.5px;margin-bottom:2px}
 .alert>b:first-child,.soon>b:first-child{display:flex;align-items:center;gap:6px}
 .okc{background:#eaf6ee;border-color:#c5e4d0;color:#1f6a40;cursor:pointer;font-size:14px}
 .bdg{position:absolute;top:-4px;left:calc(50% + 6px);background:var(--bad);color:#fff;font-style:normal;font-size:10px;border-radius:10px;padding:1px 5px}
@@ -156,7 +157,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T13:55:04Z';
+const BUILD='2026-10-08T14:03:19Z';
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
     if(m&&m[1]!==BUILD){
@@ -418,10 +419,8 @@ function lizBanner(){
   const when=dl===0?'hoje é o último dia do mês':dl===1?'falta 1 dia para o fim do mês':`faltam ${dl} dias para o fim do mês`;
   if(b.total>=min)return `<div class="card okc" data-act="tab" data-t="liz">${ic('heart',16)} Lizzie em dia: <b>${brl(b.total)}</b> guardado (mínimo ${brl(min)})${b.open>0?` · a voltar para a Lizzie ${brl(b.open)}${b.nextDue?' ('+retTxt(b.nextDue)+')':''}`:''}</div>`;
   const proj=b.total+b.plannedNow;
-  return `<div class="alert" data-act="tab" data-t="liz"><b>${ic('alert',18)} ${b.total<0?'Saldo da Lizzie NEGATIVO':'Saldo da Lizzie abaixo do mínimo'}</b>
-  <div style="font-size:24px;font-weight:800;margin:4px 0">${brl(b.total)}</div>
-  <div>Mínimo ${brl(min)} · faltam <b>${brl(min-b.total)}</b></div>
-  <div>Repor até o fim do mês (${when}).</div>
+  return `<div class="alert sm" data-act="tab" data-t="liz"><b>${ic('alert',15)} ${b.total<0?'Saldo da Lizzie NEGATIVO':'Saldo da Lizzie abaixo do mínimo'}: ${brl(b.total)}</b>
+  <div>Mínimo ${brl(min)} · faltam <b>${brl(min-b.total)}</b> · repor até o fim do mês (${when})</div>
   ${b.open>0?`<div>A voltar para a Lizzie: <b>${brl(b.open)}</b>${b.nextDue?' · '+retTxt(b.nextDue):''}</div>`:''}
   ${b.plannedNow>0?`<div>Previsto para entrar: ${brl(b.plannedNow)} ${proj>=min?'(cobre o mínimo)':'(ainda não cobre)'}</div>`:''}</div>`;
 }
@@ -586,12 +585,12 @@ function vReserve(){
 /* ---------- views ---------- */
 function vHome(){
   const list=inMonth(ym),s=stats(list),al=allocsOf(list);
-  let h=lizBanner()+debtBanner()+lateBanner()+resCard()+debtMonthCard()+`<div class="grid">
+  let h=debtBanner()+lateBanner()+resCard()+debtMonthCard()+`<div class="grid">
    <div class="stat hl"><small>Já recebido</small><b>${brl(s.got)}</b></div>
    <div class="stat"><small>Ainda a receber</small><b>${brl(s.wait)}</b></div>
    <div class="stat"><small>Destinado</small><b>${brl(s.dest)}</b></div>
    <div class="stat"><small>Falta pagar</small><b class="${s.dest-s.paid>0?'warn':'good'}">${brl(s.dest-s.paid)}</b></div></div>`;
-  h+=`<h2>Para onde está indo</h2>`;
+  h+=lizBanner()+`<h2>Para onde está indo</h2>`;
   if(!al.length)h+=`<div class="card empty">Nada lançado neste mês.<br>Toque no <b>+</b> para registrar uma entrada.</div>`;
   else S.cats.forEach(c=>{
     const a=al.filter(x=>x.catId===c.id);if(!a.length)return;
