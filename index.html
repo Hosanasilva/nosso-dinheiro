@@ -156,6 +156,14 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
+const BUILD='2026-10-08T13:17:38Z';
+async function checkUpdate(manual){
+  try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
+    if(m&&m[1]!==BUILD){
+      if(!manual){let g=0;try{g=sessionStorage.getItem('nd_upd')===m[1]}catch(e){}if(g||draft||ddraft)return 'new';try{sessionStorage.setItem('nd_upd',m[1])}catch(e){}}
+      location.replace(location.pathname+'?v='+encodeURIComponent(m[1]));return 'new'}return 'same'}
+  catch(e){return 'err'}
+}
 const KEY='nosso_dinheiro_v1';
 const AUTO=[
  ['delivery','Delivery','bag',/pizza|lanche|hamb|ifood|i-food|delivery|a[cç]a[ií]|sushi|restaurante|marmita|sorvete|pastel|churras|padaria|doces?|bolo|cafe|caf[eé]/i],
@@ -660,7 +668,8 @@ function vSettings(){
   S.cats.forEach(c=>h+=`<div class="arow" style="grid-template-columns:48px 1fr 80px 40px"><button class="b g sm" data-act="cicon" data-id="${c.id}" aria-label="Trocar ícone" style="height:44px">${ic(c.icon,18)}</button><input data-act="cname" data-id="${c.id}" value="${esc(c.name)}"><input data-act="cpct" data-id="${c.id}" type="number" inputmode="decimal" value="${c.pct}">${c.id==='lizzie'?'<span></span>':`<button class="b d sm" data-act="cdel" data-id="${c.id}">${ic('x',14)}</button>`}</div>`);
   h+=`<button class="b g" style="width:100%;margin-top:8px" data-act="cadd">+ Nova categoria</button></div>
   <div class="card"><b>Sincronização</b><div class="mut" style="margin:4px 0 10px"><span class="syncdot ${sync.status}"></span> ${{ok:'Sincronizado com o celular do casal',saving:'Salvando…',offline:'Sem conexão: tudo fica salvo neste aparelho e sobe quando voltar a internet',error:'Não foi possível sincronizar agora',off:'—'}[sync.status]||''}</div>
-  <div class="row" style="justify-content:flex-start;gap:8px"><button class="b" data-act="syncnow">Sincronizar agora</button><button class="b g" data-act="logout">Sair deste aparelho</button></div></div>
+  <div class="row" style="justify-content:flex-start;gap:8px"><button class="b" data-act="syncnow">Sincronizar agora</button><button class="b g" data-act="logout">Sair deste aparelho</button></div>
+  <div class="row" style="justify-content:flex-start;gap:8px;margin-top:8px"><button class="b" data-act="upd">Receber atualização</button><span class="mut" id="updmsg">Versão ${BUILD.slice(0,10)}</span></div></div>
   <div class="card"><b>Backup</b><div class="mut">Os dados ficam salvos neste aparelho. Exporte de vez em quando.</div>
   <div class="row" style="margin-top:8px"><button class="b" data-act="exp">Exportar</button><button class="b g" data-act="imp">Importar</button></div><input type="file" id="impf" accept=".json" hidden></div>`;
   return h;
@@ -752,6 +761,7 @@ document.addEventListener('click',e=>{
   else if(a==='rmdel'){S.reserveMoves=S.reserveMoves.filter(m=>m.id!==el.dataset.id);save();render()}
   else if(a==='lgo')submitLogin();
   else if(a==='lmode'){lmode=lmode==='enter'?'create':'enter';lerr='';drawLogin()}
+  else if(a==='upd'){const m=document.getElementById('updmsg');if(m)m.textContent='Procurando...';checkUpdate(true).then(r=>{const m=document.getElementById('updmsg');if(m)m.textContent=r==='same'?'Você já está na versão mais recente ✓':r==='err'?'Sem conexão. Tente de novo.':'Atualizando...'})}
   else if(a==='syncnow'){setStatus('saving');pull().then(()=>render())}
   else if(a==='logout'){if(confirm('Sair deste aparelho? Os dados continuam salvos na nuvem; para entrar de novo você vai precisar do PIN.'))doLogout()}
   else if(a==='dadd')openDebtForm();
@@ -812,6 +822,7 @@ document.addEventListener('input',e=>{
 $('#fab').onclick=()=>openForm();
 loadSync();
 if(sync.key){document.body.classList.remove('locked');render();setStatus(sync.dirty?'saving':'ok');pull()}else showLogin();
+setTimeout(()=>checkUpdate(false),2500);
 </script>
 </body>
 </html>
