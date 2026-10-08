@@ -156,7 +156,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T13:38:40Z';
+const BUILD='2026-10-08T13:52:08Z';
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
     if(m&&m[1]!==BUILD){
@@ -519,12 +519,13 @@ function openDebtForm(id){
   <label>Nome</label><input id="d_name" placeholder="Ex: Carro, empréstimo..." value="${esc(ddraft.name)}">
   <label>Tipo</label><select id="d_kind">${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${k===ddraft.kind?'selected':''}>${v}</option>`).join('')}</select>
   <div class="two"><div><label>Valor total (R$)</label><input id="d_total" type="number" step="0.01" inputmode="decimal" value="${ddraft.total}"></div>
-  <div><label>Entrada / já pago antes (R$)</label><input id="d_ent" type="number" step="0.01" inputmode="decimal" value="${ddraft.ent}"></div></div>
-  <div class="two"><div><label>Nº de parcelas</label><input id="d_count" type="number" inputmode="numeric" value="${ddraft.count}"></div>
+  <div><label>Já pago até hoje (R$)</label><input id="d_ent" type="number" step="0.01" inputmode="decimal" value="${ddraft.ent}"></div></div>
+  <div class="two"><div><label>Parcelas que ainda faltam (nº)</label><input id="d_count" type="number" inputmode="numeric" value="${ddraft.count}"></div>
   <div><label>Valor da parcela (R$)</label><input id="d_pv" type="number" step="0.01" inputmode="decimal" value="${ddraft.pv}"></div></div>
   <div class="two"><div><label>Vencimento da 1ª parcela</label><input id="d_first" type="date" value="${ddraft.first}"></div>
-  ${db?'<div></div>':`<div><label>Parcelas já pagas</label><input id="d_paid" type="number" inputmode="numeric" value="${ddraft.paidN}"></div>`}</div>
+  ${db?'<div></div>':`<div><label>Dessas, quantas já pagou? (nº, normalmente 0)</label><input id="d_paid" type="number" inputmode="numeric" value="${ddraft.paidN}"></div>`}</div>
   <details id="d_rowsw" style="margin-top:10px"><summary class="mut" style="cursor:pointer">Ajustar data e valor de cada parcela</summary><div id="d_rows"></div></details>
+  <div class="mut" style="margin-top:8px;font-size:12px">Em "Já pago até hoje" some a entrada e tudo o que já pagou. As parcelas abaixo são só o que ainda falta pagar.</div>
   <div id="d_hint" class="mut" style="margin:10px 0"></div>
   <button class="b" style="width:100%;padding:14px" data-act="dsave">Salvar</button></div></div>`;
   drows();dhint();
@@ -544,13 +545,14 @@ function dhint(){
   const e=$('#d_hint');if(!e||!ddraft)return;
   const c=+ddraft.count||0,pv=+ddraft.pv||0,en=+ddraft.ent||0,t=+ddraft.total||0,tp=en+(ddraft.inst&&ddraft.inst.length&&ddraft.inst.every(x=>x.v>=0)?sum(ddraft.inst.map(x=>x.v)):c*pv);
   if(!c||!pv){e.textContent='';return}
-  e.textContent=`Total a pagar: ${brl(tp)}`+(t>0&&tp-t>0.5?` (acréscimo/juros de ${brl(tp-t)})`:'');
+  e.innerHTML=`Parcelas somam: <b>${brl(tp-en)}</b> · Total a pagar: ${brl(tp)}`+(t>0?(tp-t>0.5?` · acréscimo/juros de ${brl(tp-t)}`:t-tp>0.5?`<br><span class="warn">Faltam ${brl(t-tp)} para fechar o valor total (${brl(t-en)} ainda falta pagar).</span>`:'<br><span class="good">Fecha com o valor total ✓</span>'):'');
 }
 function saveDebt(){
   const d=ddraft,count=Math.round(+d.count),pv=+d.pv;
   if(!String(d.name).trim())return alert('Coloque o nome.');
   if(!(count>=1)||!(pv>0))return alert('Coloque o nº de parcelas e o valor da parcela.');
   if(!d.first)return alert('Coloque o vencimento da 1ª parcela.');
+  if(!d.id&&(+d.paidN||0)>count)return alert('"Quantas já pagou" é a quantidade de parcelas (ex: 1), não o valor. Se pagou dinheiro, some em "Já pago até hoje".');
   const old=d.id?S.debts.find(x=>x.id===d.id):null,paid=old?{...old.paid}:{};
   if(!old){const n=Math.min(count,Math.max(0,Math.round(+d.paidN)||0));for(let k=1;k<=n;k++)paid[k]=(d.inst&&d.inst[k-1]&&d.inst[k-1].d)||addMonths(d.first,k-1)}
   else Object.keys(paid).forEach(k=>{if(+k>count)delete paid[k]});
