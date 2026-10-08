@@ -768,7 +768,7 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('input',e=>{
   const el=e.target;if(!draft)return;
-  if(el.id==='f_v'){draft.value=el.value;if(!draft.manual)redist()}
+  if(el.id==='f_v'){draft.value=el.value;if(!draft.manual)redist();else updLeft()}
   else if(el.id==='f_p')draft.person=el.value;
   else if(el.id==='f_s')draft.source=el.value;
   else if(el.id==='f_d')draft.date=el.value;
