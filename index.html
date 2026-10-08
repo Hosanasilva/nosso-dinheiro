@@ -156,7 +156,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T13:33:56Z';
+const BUILD='2026-10-08T13:38:40Z';
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
     if(m&&m[1]!==BUILD){
@@ -442,18 +442,19 @@ const KICON={carro:'car',casa:'building',compra:'bag',credito:'card',outro:'tag'
 const kEmoji=k=>ic(KICON[k]||'tag',16);
 const fdateFull=d=>d.split('-').reverse().join('/');
 const addMonths=(iso,n)=>{const [y,m,d]=iso.split('-').map(Number);const t=new Date(y,m-1+n,1);const last=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(Math.min(d,last)).padStart(2,'0')};
-const dueOf=(db,k)=>addMonths(db.first,k-1);
+const dueOf=(db,k)=>(db.inst&&db.inst[k-1]&&db.inst[k-1].d)||addMonths(db.first,k-1);
+const pvOf=(db,k)=>(db.inst&&db.inst[k-1]&&db.inst[k-1].v>0)?+db.inst[k-1].v:+db.pv;
 const daysTo=iso=>{const [y,m,d]=iso.split('-').map(Number);const n=new Date();return Math.round((new Date(y,m-1,d)-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000)};
 const dueTxt=dd=>dd<0?`venceu há ${-dd} dia${-dd>1?'s':''}`:dd===0?'vence HOJE':dd===1?'vence amanhã':`vence em ${dd} dias`;
 const dAl=(db,paid)=>allocsOf(S.incomes).filter(a=>a.debtId===db.id&&!!a.paid===paid);
-function pdSet(db){const set=new Set(Object.keys(db.paid||{}).map(Number)),via=sum(dAl(db,true).map(a=>a.value));let ex=Math.floor((via+0.004)/(db.pv||1));
-  for(let k=1;k<=db.count&&ex>0;k++)if(!set.has(k)){set.add(k);ex--}return set}
+function pdSet(db){const set=new Set(Object.keys(db.paid||{}).map(Number));let via=sum(dAl(db,true).map(a=>a.value))+0.004;
+  for(let k=1;k<=db.count;k++){if(set.has(k))continue;const v=pvOf(db,k);if(via>=v){set.add(k);via-=v}else break}return set}
 const isPd=(db,k)=>pdSet(db).has(+k);
 function dstats(db){
   const ps=pdSet(db),pc=ps.size,rem=Math.max(0,db.count-pc),en=+db.entrada||0;
   let next=null;for(let k=1;k<=db.count;k++)if(!ps.has(k)){next=k;break}
-  const man=Object.keys(db.paid||{}).length,via=Math.min(sum(dAl(db,true).map(a=>a.value)),Math.max(0,db.count-man)*db.pv);
-  const paidAmt=Math.min(en+db.count*db.pv,en+man*db.pv+via),tot=en+db.count*db.pv;
+  let man=0,unp=0,all=0;for(let k=1;k<=db.count;k++){const v=pvOf(db,k);all+=v;if(db.paid&&db.paid[k])man+=v;else unp+=v}
+  const via=Math.min(sum(dAl(db,true).map(a=>a.value)),unp),tot=en+all,paidAmt=Math.min(tot,en+man+via);
   return {pc,rem,next,paidAmt,remAmt:next?Math.max(0,tot-paidAmt):0,planned:sum(dAl(db,false).map(a=>a.value)),total:tot,nextDue:next?dueOf(db,next):null,last:dueOf(db,db.count)};
 }
 function debtItems(){
@@ -467,7 +468,7 @@ const debtSoon=()=>debtItems().some(x=>x.dd<=5||x.over>0);
 function debtBanner(){
   const it=debtItems().filter(x=>x.dd<=5||x.over>0).sort((a,b)=>a.dd-b.dd);if(!it.length)return'';
   const late=it.some(x=>x.dd<0);
-  return `<div class="${late?'alert':'soon'}" data-act="tab" data-t="parc"><b>${ic(late?'alert':'bell',18)} ${late?'Parcela atrasada':'Parcela vencendo'}</b>${it.slice(0,4).map(x=>`<div style="margin-top:4px">${kEmoji(x.db.kind)} <b>${esc(x.db.name)}</b> · parcela ${x.s.next}/${x.db.count} · ${dueTxt(x.dd)} · ${brl(x.db.pv)}${x.over>1?` · ${x.over} atrasadas`:''}</div>`).join('')}</div>`;
+  return `<div class="${late?'alert':'soon'}" data-act="tab" data-t="parc"><b>${ic(late?'alert':'bell',18)} ${late?'Parcela atrasada':'Parcela vencendo'}</b>${it.slice(0,4).map(x=>`<div style="margin-top:4px">${kEmoji(x.db.kind)} <b>${esc(x.db.name)}</b> · parcela ${x.s.next}/${x.db.count} · ${dueTxt(x.dd)} · ${brl(pvOf(x.db,x.s.next))}${x.over>1?` · ${x.over} atrasadas`:''}</div>`).join('')}</div>`;
 }
 function lateBanner(){
   const t=today(),cm=t.slice(0,7);
@@ -480,7 +481,7 @@ function lateBanner(){
 function debtMonthCard(){
   if(!S.debts.length)return'';
   let tot=0,pend=0,n=0,np=0;
-  S.debts.forEach(db=>{const ps=pdSet(db);for(let k=1;k<=db.count;k++)if(dueOf(db,k).slice(0,7)===ym){n++;tot+=db.pv;if(!ps.has(k)){np++;pend+=db.pv}}});
+  S.debts.forEach(db=>{const ps=pdSet(db);for(let k=1;k<=db.count;k++)if(dueOf(db,k).slice(0,7)===ym){n++;tot+=pvOf(db,k);if(!ps.has(k)){np++;pend+=pvOf(db,k)}}});
   if(!n)return'';
   return `<div class="card" data-act="tab" data-t="parc" style="cursor:pointer"><div class="row"><b>${ic('card',18)} Parcelas de ${monthName(ym).split(' ')[0]}</b><span>${brl(tot)}</span></div><div class="mut">${n-np} de ${n} pagas · falta pagar ${brl(pend)}</div></div>`;
 }
@@ -493,7 +494,7 @@ function vDebts(){
     const ps=pdSet(db);const pct=s.total?Math.min(100,s.paidAmt/s.total*100):0,done=!s.next,dd=done?0:daysTo(s.nextDue);
     h+=`<div class="card"><div class="row"><b>${kEmoji(db.kind)} ${esc(db.name)}</b>${done?`<span class="tag ok">${ic('check',13)} quitado</span>`:`<span class="tag">${s.pc}/${db.count} pagas</span>`}</div>
     <div class="bar"><i style="width:${pct}%;background:#7b2c43"></i></div>
-    <div class="grid"><div class="stat"><small>Total a pagar</small><b>${brl(s.total)}</b></div><div class="stat"><small>Parcela</small><b>${brl(db.pv)}</b></div>
+    <div class="grid"><div class="stat"><small>Total a pagar</small><b>${brl(s.total)}</b></div><div class="stat"><small>${db.inst?'Próxima parcela':'Parcela'}</small><b>${brl(pvOf(db,Math.max(1,s.next||1)))}</b></div>
     <div class="stat"><small>Já pago</small><b class="good">${brl(s.paidAmt)}</b></div><div class="stat hl"><small>Falta pagar</small><b>${brl(s.remAmt)}</b></div></div>
     ${done?'':`<div class="mut" style="margin-top:8px">Faltam <b>${s.rem}</b> de ${db.count} parcelas · última em ${fdateFull(s.last).slice(3)}</div>
     <div style="margin-top:6px;font-weight:600;${dd<0?'color:var(--bad)':dd<=5?'color:#b9760f':''}">Próxima: parcela ${s.next}/${db.count} · ${fdateFull(s.nextDue)} · ${dueTxt(dd)}</div>`}
@@ -504,15 +505,15 @@ function vDebts(){
      <button class="b g sm" data-act="dedit" data-id="${db.id}">Editar</button>
      <button class="b d sm" data-act="ddel" data-id="${db.id}">Apagar</button></div>
     <details ${openDebt===db.id?'open':''} style="margin-top:8px"><summary class="mut" style="cursor:pointer">Ver todas as parcelas</summary>
-     ${Array.from({length:db.count},(_,i)=>i+1).map(k=>`<label class="inst ${ps.has(k)?'paid':''}"><input type="checkbox" data-act="dtoggle" data-id="${db.id}" data-k="${k}" ${ps.has(k)?'checked':''} ${ps.has(k)&&!db.paid[k]?'disabled':''}><span style="flex:1">${k}/${db.count} · vence ${fdateFull(dueOf(db,k))}</span><span class="mut">${db.paid[k]?'pago em '+fdateFull(db.paid[k]):brl(db.pv)}</span></label>`).join('')}
+     ${Array.from({length:db.count},(_,i)=>i+1).map(k=>`<label class="inst ${ps.has(k)?'paid':''}"><input type="checkbox" data-act="dtoggle" data-id="${db.id}" data-k="${k}" ${ps.has(k)?'checked':''} ${ps.has(k)&&!db.paid[k]?'disabled':''}><span style="flex:1">${k}/${db.count} · vence ${fdateFull(dueOf(db,k))}</span><span class="mut">${db.paid[k]?'pago em '+fdateFull(db.paid[k]):brl(pvOf(db,k))}</span></label>`).join('')}
     </details></div>`;
   });
   return h;
 }
 function openDebtForm(id){
   const db=id?S.debts.find(x=>x.id===id):null;
-  ddraft=db?{id:db.id,name:db.name,kind:db.kind,total:db.total||'',ent:db.entrada||'',count:db.count,pv:db.pv,first:db.first,paidN:'',pvManual:true}
-   :{name:'',kind:'carro',total:'',ent:'',count:'',pv:'',first:today(),paidN:'',pvManual:false};
+  ddraft=db?{id:db.id,name:db.name,kind:db.kind,total:db.total||'',ent:db.entrada||'',count:db.count,pv:db.pv,first:db.first,paidN:'',pvManual:true,inst:Array.from({length:db.count},(_,i)=>{const d=dueOf(db,i+1),v=pvOf(db,i+1);return {d,v,dm:d!==addMonths(db.first,i),vm:Math.abs(v-db.pv)>0.004}})}
+   :{name:'',kind:'carro',total:'',ent:'',count:'',pv:'',first:today(),paidN:'',pvManual:false,inst:[]};
   $('#modal').innerHTML=`<div class="modal" data-act="closem"><div class="sheet">
   <div class="row"><b style="font-size:18px">${db?'Editar':'Nova'} compra parcelada / crédito</b><button class="b g sm" data-act="closem">Fechar</button></div>
   <label>Nome</label><input id="d_name" placeholder="Ex: Carro, empréstimo..." value="${esc(ddraft.name)}">
@@ -523,13 +524,25 @@ function openDebtForm(id){
   <div><label>Valor da parcela (R$)</label><input id="d_pv" type="number" step="0.01" inputmode="decimal" value="${ddraft.pv}"></div></div>
   <div class="two"><div><label>Vencimento da 1ª parcela</label><input id="d_first" type="date" value="${ddraft.first}"></div>
   ${db?'<div></div>':`<div><label>Parcelas já pagas</label><input id="d_paid" type="number" inputmode="numeric" value="${ddraft.paidN}"></div>`}</div>
+  <details id="d_rowsw" style="margin-top:10px"><summary class="mut" style="cursor:pointer">Ajustar data e valor de cada parcela</summary><div id="d_rows"></div></details>
   <div id="d_hint" class="mut" style="margin:10px 0"></div>
   <button class="b" style="width:100%;padding:14px" data-act="dsave">Salvar</button></div></div>`;
-  dhint();
+  drows();dhint();
+}
+function drows(){
+  const d=ddraft,c=Math.min(120,Math.round(+d.count)||0),box=document.getElementById('d_rows');if(!d||!box)return;
+  d.inst=Array.from({length:c},(_,i)=>d.inst[i]||{});
+  const en=+d.ent||0,t=+d.total||0;
+  if(c&&d.first){
+    const vmN=d.inst.filter(x=>x.vm).length,vmS=sum(d.inst.filter(x=>x.vm).map(x=>x.v));
+    if(t>0&&!d.pvManual&&c-vmN>0){d.pv=Math.round((t-en-vmS)/(c-vmN)*100)/100;const pi=document.getElementById('d_pv');if(pi)pi.value=d.pv}
+    d.inst.forEach((x,i)=>{if(!x.dm)x.d=addMonths(d.first,i);if(!x.vm)x.v=+d.pv||0});
+  }
+  box.innerHTML=c&&d.first?d.inst.map((x,i)=>`<div class="arow" style="grid-template-columns:34px 1fr 100px"><span class="mut">${i+1}ª</span><input class="ri-d" data-k="${i}" type="date" value="${x.d||''}"><input class="ri-v" data-k="${i}" type="number" step="0.01" inputmode="decimal" value="${x.v||''}"></div>`).join(''):'<div class="mut">Preencha o nº de parcelas e o 1º vencimento.</div>';
 }
 function dhint(){
   const e=$('#d_hint');if(!e||!ddraft)return;
-  const c=+ddraft.count||0,pv=+ddraft.pv||0,en=+ddraft.ent||0,t=+ddraft.total||0,tp=en+c*pv;
+  const c=+ddraft.count||0,pv=+ddraft.pv||0,en=+ddraft.ent||0,t=+ddraft.total||0,tp=en+(ddraft.inst&&ddraft.inst.length&&ddraft.inst.every(x=>x.v>=0)?sum(ddraft.inst.map(x=>x.v)):c*pv);
   if(!c||!pv){e.textContent='';return}
   e.textContent=`Total a pagar: ${brl(tp)}`+(t>0&&tp-t>0.5?` (acréscimo/juros de ${brl(tp-t)})`:'');
 }
@@ -539,9 +552,11 @@ function saveDebt(){
   if(!(count>=1)||!(pv>0))return alert('Coloque o nº de parcelas e o valor da parcela.');
   if(!d.first)return alert('Coloque o vencimento da 1ª parcela.');
   const old=d.id?S.debts.find(x=>x.id===d.id):null,paid=old?{...old.paid}:{};
-  if(!old){const n=Math.min(count,Math.max(0,Math.round(+d.paidN)||0));for(let k=1;k<=n;k++)paid[k]=addMonths(d.first,k-1)}
+  if(!old){const n=Math.min(count,Math.max(0,Math.round(+d.paidN)||0));for(let k=1;k<=n;k++)paid[k]=(d.inst&&d.inst[k-1]&&d.inst[k-1].d)||addMonths(d.first,k-1)}
   else Object.keys(paid).forEach(k=>{if(+k>count)delete paid[k]});
-  const rec={id:d.id||uid(),name:String(d.name).trim(),kind:d.kind,count,pv,first:d.first,entrada:+d.ent||0,total:+d.total||0,paid};
+  const inst=Array.from({length:count},(_,i)=>{const x=(d.inst||[])[i]||{};return {d:x.d||addMonths(d.first,i),v:x.v>0?+x.v:pv}});
+  const custom=inst.some((x,i)=>x.d!==addMonths(d.first,i)||Math.abs(x.v-pv)>0.004);
+  const rec={id:d.id||uid(),name:String(d.name).trim(),kind:d.kind,count,pv,first:d.first,entrada:+d.ent||0,total:+d.total||0,paid,...(custom?{inst}:{})};
   if(old)S.debts=S.debts.map(x=>x.id===rec.id?rec:x);else S.debts.push(rec);
   save();$('#modal').innerHTML='';ddraft=null;render();
 }
@@ -715,7 +730,7 @@ function repHtml(){const ol=openLoans().filter(m=>m.value-retOf(m)-(planRet(m)-(
  return `<div style="margin:-4px 0 8px"><select id="f_rp"><option value="">Dinheiro novo para a Lizzie</option>${ol.map(m=>`<option value="${m.id}" ${m.id===draft.repays?'selected':''}>Devolve empréstimo: ${brl(m.value-retOf(m))} · ${esc(m.who||'—')}</option>`).join('')}</select></div>`}
 const exTot=()=>sum((draft.extras||[]).map(x=>+x.value||0))+sum(Object.values(draft.debts||{}).map(x=>+x||0));
 function debtsFormHtml(){const l=S.debts.filter(db=>{const st=dstats(db),own=+(draft.debts||{})[db.id]||0;if(own>0)return true;return st.next&&st.remAmt-st.planned>0.004});if(!l.length)return'';
- return `<label style="margin-top:10px">Parcelas e empréstimos em andamento</label>`+l.map(db=>{const s=dstats(db);const other=s.planned-(draft.id&&draft.debts[db.id]?+draft.debts[db.id]:0);return `<div class="arow"><span>${ic('card',16)} ${esc(db.name)}<br><small class="mut">falta ${brl(Math.max(0,s.remAmt-other))} · parcela ${brl(db.pv)}</small></span><input class="fd" data-id="${db.id}" type="number" step="0.01" inputmode="decimal" value="${draft.debts[db.id]??''}"></div>`}).join('')}
+ return `<label style="margin-top:10px">Parcelas e empréstimos em andamento</label>`+l.map(db=>{const s=dstats(db);const other=s.planned-(draft.id&&draft.debts[db.id]?+draft.debts[db.id]:0);return `<div class="arow"><span>${ic('card',16)} ${esc(db.name)}<br><small class="mut">falta ${brl(Math.max(0,s.remAmt-other))} · parcela ${brl(pvOf(db,Math.max(1,dstats(db).next||1)))}</small></span><input class="fd" data-id="${db.id}" type="number" step="0.01" inputmode="decimal" value="${draft.debts[db.id]??''}"></div>`}).join('')}
 function catOpts(sel,auto){return `<option value="" ${auto?'selected':''}>Automático</option>`+S.cats.concat(AUTO.filter(a=>!S.cats.some(c=>c.id===a[0])).map(a=>({id:a[0],name:a[1]}))).map(c=>`<option value="${c.id}" ${!auto&&c.id===sel?'selected':''}>${esc(c.name)}</option>`).join('')}
 function extrasHtml(){return (draft.extras||[]).map((x,k)=>{const cid=x.auto===false?x.cat:detectCat(x.name);const cn=(cat(cid)||(AUTO.find(a=>a[0]===cid)&&{name:AUTO.find(a=>a[0]===cid)[1]})||{name:'Outros'}).name;
  return `<div class="arow" style="grid-template-columns:1fr 90px 34px"><input class="xn" data-k="${k}" placeholder="Ex: pizza" value="${esc(x.name)}"><input class="xv" data-k="${k}" type="number" step="0.01" inputmode="decimal" value="${x.value||''}"><button class="b d sm" data-act="xdel" data-k="${k}" aria-label="Remover">${ic('x',14)}</button>
@@ -817,7 +832,13 @@ document.addEventListener('input',e=>{
   else if(el.classList.contains('fa')){draft.manual=true;draft.allocs[el.dataset.id]=+el.value||0;updLeft()}
 });
 document.addEventListener('input',e=>{
-  const el=e.target;if(!ddraft||!el.id||el.id.slice(0,2)!=='d_')return;
+  const el=e.target;
+  if(ddraft&&el.classList&&(el.classList.contains('ri-d')||el.classList.contains('ri-v'))){const x=ddraft.inst[+el.dataset.k];if(el.classList.contains('ri-d')){x.d=el.value;x.dm=true}else{x.v=+el.value||0;x.vm=true;
+    const d=ddraft,c=d.inst.length,en=+d.ent||0,t=+d.total||0,vmN=d.inst.filter(y=>y.vm).length;
+    if(t>0&&!d.pvManual&&c-vmN>0){d.pv=Math.round((t-en-sum(d.inst.filter(y=>y.vm).map(y=>y.v)))/(c-vmN)*100)/100;const pi=document.getElementById('d_pv');if(pi)pi.value=d.pv;
+      d.inst.forEach((y,i)=>{if(!y.vm){y.v=d.pv;const inp=document.querySelector('.ri-v[data-k="'+i+'"]');if(inp)inp.value=d.pv}})}}
+  dhint();return}
+  if(!ddraft||!el.id||el.id.slice(0,2)!=='d_')return;
   const map={d_name:'name',d_kind:'kind',d_total:'total',d_ent:'ent',d_count:'count',d_pv:'pv',d_first:'first',d_paid:'paidN'},f=map[el.id];if(!f)return;
   ddraft[f]=el.value;
   if(el.id==='d_pv')ddraft.pvManual=true;
@@ -825,6 +846,7 @@ document.addEventListener('input',e=>{
     const c=+ddraft.count,t=+ddraft.total,en=+ddraft.ent||0;
     if(c>0&&t>0){ddraft.pv=Math.round((t-en)/c*100)/100;const p=$('#d_pv');if(p)p.value=ddraft.pv}
   }
+  if(['d_total','d_ent','d_count','d_pv','d_first'].includes(el.id))drows();
   dhint();
 });
 $('#fab').onclick=()=>openForm();
