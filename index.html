@@ -157,7 +157,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-08T17:29:28Z';
+const BUILD='2026-10-12T14:22:14Z';
 let updAvail=false;
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
@@ -225,6 +225,7 @@ function migrate(){
   if(!Array.isArray(S.reserveMoves))S.reserveMoves=[];
   if(!Array.isArray(S.lizzieMoves))S.lizzieMoves=[];
   if(!Array.isArray(S.debts))S.debts=[];
+  if(!Array.isArray(S.spends))S.spends=[];
 }
 migrate();
 
@@ -473,6 +474,7 @@ function debtBanner(){
 }
 
 const ESS=['aluguel','agua','luz','mercado','farmacia','saude','bebe','casa','lizzie'];
+const catOf=id=>cat(id)||(AUTO.find(a=>a[0]===id)?{id,name:AUTO.find(a=>a[0]===id)[1],icon:AUTO.find(a=>a[0]===id)[2]}:null);
 const isEss=c=>c.ess!==undefined?!!c.ess:ESS.includes(c.id);
 function monthSummary(m){
   const list=inMonth(m),al=allocsOf(list);
@@ -482,11 +484,12 @@ function monthSummary(m){
   al.filter(a=>a.paid&&!SAVE.includes(a.catId)).forEach(a=>add(a.catId,a.value));
   const lg=sum(S.lizzieMoves.filter(x=>x.type==='out'&&x.date.slice(0,7)===m).map(x=>x.value));
   if(lg>0)add('lizzie_gasto',lg);
+  S.spends.filter(x=>x.date.slice(0,7)===m).forEach(x=>add(x.cat||detectCat(x.desc),+x.value||0));
   const saved=sum(al.filter(a=>a.paid&&SAVE.includes(a.catId)).map(a=>a.value));
   const pend=sum(al.filter(a=>!a.paid&&!SAVE.includes(a.catId)).map(a=>a.value));
   let ess=0,non=0;const eRows=[],nRows=[];
   Object.entries(rows).forEach(([cid,v])=>{
-    const c=cid==='lizzie_gasto'?{id:cid,name:'Gastos com a Lizzie',icon:'heart',ess:true}:cat(cid);if(!c)return;
+    const c=cid==='lizzie_gasto'?{id:cid,name:'Gastos com a Lizzie',icon:'heart',ess:true}:catOf(cid);if(!c)return;
     const r={c,v};if(isEss(c)){ess+=v;eRows.push(r)}else{non+=v;nRows.push(r)}});
   eRows.sort((a,b)=>b.v-a.v);nRows.sort((a,b)=>b.v-a.v);
   return {got,out:ess+non,ess,non,eRows,nRows,saved,pend,left:got-ess-non-saved}
@@ -713,6 +716,37 @@ function donut(items){
   return `<div class="donutwrap"><svg width="160" height="160" viewBox="0 0 160 160">${arcs}<text x="80" y="78" text-anchor="middle" font-size="11" fill="#8a7f60">total</text><text x="80" y="95" text-anchor="middle" font-size="13" font-weight="700" fill="#3a3320">${brl(tot)}</text></svg>
   <div class="legend">${items.map(i=>`<div><i style="background:${i.c}"></i>${i.l} · <b>${brl(i.v)}</b> · ${(Math.round(i.v/tot*1000)/10).toLocaleString('pt-BR')}%</div>`).join('')}</div></div>`;
 }
+
+/* ---------- saídas do dia a dia ---------- */
+const PAYS={credito:'Crédito',debito:'Débito',pix:'Pix',dinheiro:'Dinheiro'};
+const spendCat=x=>catOf(x.cat||detectCat(x.desc))||catOf('outros')||{name:'Outros',icon:'tag'};
+function vSpends(){
+  const list=S.spends.filter(x=>x.date.slice(0,7)===ym).sort((a,b)=>b.date.localeCompare(a.date)),tot=sum(list.map(x=>x.value));
+  const by=k=>sum(list.filter(x=>x.pay===k).map(x=>x.value));
+  const liz=sum(list.filter(x=>x.lizId).map(x=>x.value));
+  const ppl=S.people.map(p=>({p,v:sum(list.filter(x=>x.who===p).map(x=>x.value))})).filter(r=>r.v>0);
+  let h=`<div class="grid"><div class="stat hl"><small>Saídas do mês</small><b>${brl(tot)}</b></div><div class="stat"><small>No crédito (fatura)</small><b>${brl(by('credito'))}</b></div>
+  <div class="stat"><small>Débito / Pix / dinheiro</small><b>${brl(by('debito')+by('pix')+by('dinheiro'))}</b></div><div class="stat"><small>Pegos da Lizzie</small><b>${brl(liz)}</b></div></div>`;
+  if(ppl.length>1)h+=`<div class="card"><div class="mut">Quem pagou: ${ppl.map(r=>`<b>${esc(r.p)}</b> ${brl(r.v)}`).join(' · ')}</div></div>`;
+  const ol=openLoans().filter(m=>m.spendId);
+  if(ol.length)h+=`<div class="card okc" data-act="tab" data-t="liz">${ic('heart',16)} A devolver para a Lizzie: <b>${brl(sum(ol.map(m=>m.value-retOf(m))))}</b> · toque para ver</div>`;
+  h+=`<div class="card"><b>Nova saída</b>
+   <div class="two"><div><label>Valor</label><input id="sp_v" type="number" step="0.01" inputmode="decimal"></div><div><label>Data</label><input id="sp_dt" type="date" value="${today()}"></div></div>
+   <label>O que foi?</label><input id="sp_d" placeholder="Ex: hamburgueria, pizza">
+   <div class="two"><div><label>Forma de pagamento</label><select id="sp_p">${Object.entries(PAYS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>
+   <div><label>Quem pagou</label><select id="sp_w">${S.people.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div></div>
+   <label class="inst" style="margin-top:12px"><input type="checkbox" id="sp_l"> <span>Usamos dinheiro da Lizzie (empréstimo)</span></label>
+   <div id="sp_lx" style="display:none"><label>Previsão de devolução</label><input id="sp_due" type="date"><div class="mut" style="margin-top:6px">O valor entra na área da Lizzie em "A voltar" e o saldo dela diminui até você marcar que voltou.</div></div>
+   <button class="b" style="margin-top:12px;width:100%;padding:13px" data-act="spadd">Adicionar saída</button></div>`;
+  if(!list.length)return h+`<div class="card empty">Nenhuma saída em ${monthName(ym)}.</div>`;
+  h+=`<h2>Saídas de ${monthName(ym)}</h2>`;
+  list.forEach(x=>{const c=spendCat(x),m=x.lizId&&S.lizzieMoves.find(z=>z.id===x.lizId);
+    const st=m?(m.value-retOf(m)<=0.004?' · devolvido à Lizzie':' · emprestado da Lizzie, falta devolver '+brl(m.value-retOf(m))):'';
+    h+=`<div class="card"><div class="row"><b>${ic(c.icon||'tag',16)} ${esc(x.desc||c.name)}</b><b>${brl(x.value)}</b></div>
+    <div class="mut">${fdate(x.date)} · ${esc(c.name)} · ${PAYS[x.pay]||''}${x.who?' · '+esc(x.who):''}${st}</div>
+    <div style="margin-top:8px;text-align:right"><button class="b d sm" data-act="spdel" data-id="${x.id}">${ic('x',14)}</button></div></div>`});
+  return h;
+}
 function vCharts(){
   const list=inMonth(ym),al=allocsOf(list);
   const items=S.cats.map(c=>({l:ic(c.icon,16)+' '+esc(c.name),v:sum(al.filter(a=>a.catId===c.id).map(a=>a.value)),c:color(c.id)})).filter(i=>i.v>0);
@@ -800,15 +834,15 @@ function saveForm(){
 }
 
 /* ---------- render ---------- */
-const TABS=[['home','home','Início'],['inc','down','Entradas'],['liz','heart','Lizzie'],['res','shield','Reserva'],['parc','card','Parcelas'],['gr','chart','Gráficos'],['set','sliders','Ajustes']];
+const TABS=[['home','home','Início'],['inc','down','Entradas'],['sai','cart','Saídas'],['liz','heart','Lizzie'],['res','shield','Reserva'],['parc','card','Parcelas'],['gr','chart','Gráficos'],['set','sliders','Ajustes']];
 function render(){
   document.body.classList.toggle('liz',tab==='liz');
   $('#ttl').textContent=tab==='liz'?'Lizzie ✨':tab==='res'?'Reserva':tab==='parc'?'Parcelas':'Nosso Dinheiro';
   $('#logo').innerHTML=tab==='liz'?'🧸':ic({res:'shield',parc:'card'}[tab]||'wallet',19);
   $('#mon').innerHTML=tab==='set'||tab==='liz'||tab==='res'||tab==='parc'?'':`<button data-act="mprev">‹</button><span>${monthName(ym)}</span><button data-act="mnext">›</button>`;
-  $('#app').innerHTML={home:vHome,inc:vIncomes,liz:vLizzie,res:vReserve,parc:vDebts,gr:vCharts,set:vSettings}[tab]();
+  $('#app').innerHTML={home:vHome,inc:vIncomes,sai:vSpends,liz:vLizzie,res:vReserve,parc:vDebts,gr:vCharts,set:vSettings}[tab]();
   $('#nav').innerHTML=TABS.map(t=>`<button class="${tab===t[0]?'on':''}" data-act="tab" data-t="${t[0]}"><span>${ic(t[1],22)}${(t[0]==='liz'&&lizLow())||(t[0]==='parc'&&debtSoon())||(t[0]==='set'&&updAvail)?'<em class="bdg">!</em>':''}</span>${t[2]}</button>`).join('');
-  $('#fab').style.display=tab==='liz'||tab==='set'||tab==='res'||tab==='parc'?'none':'flex';
+  $('#fab').style.display=tab==='liz'||tab==='set'||tab==='res'||tab==='parc'||tab==='sai'?'none':'flex';
 }
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
@@ -823,6 +857,10 @@ document.addEventListener('click',e=>{
   else if(a==='savef')saveForm();
   else if(a==='lmadd'){const v=+$('#lm_v').value;if(!(v>0))return alert('Coloque o valor.');const t=$('#lm_t').value,w=document.getElementById('lm_w'),du=document.getElementById('lm_due');if((t==='loan'||t==='lent')&&!(w&&w.value.trim()))return alert(t==='lent'?'Diga a quem você emprestou.':'Diga para que o dinheiro foi usado.');S.lizzieMoves.push({id:uid(),type:t,value:v,desc:$('#lm_d').value,date:$('#lm_dt').value,...((t==='loan'||t==='lent')?{who:w.value.trim(),due:du?du.value:'',ret:0}:{})});save();render()}
   else if(a==='lret'){const m=S.lizzieMoves.find(x=>x.id===el.dataset.id);if(!m)return;const rem=m.value-retOf(m);const inp=prompt('Quanto voltou para a Lizzie? (R$)',String(Math.round(rem*100)/100).replace('.',','));if(inp===null)return;const v=parseFloat(String(inp).replace(',','.'));if(!(v>0))return;m.ret=Math.min(m.value,(+m.ret||0)+v);if(m.ret>=m.value-0.004)m.retDate=today();save();render()}
+  else if(a==='spadd'){const v=+$('#sp_v').value;if(!(v>0))return alert('Coloque o valor.');const d=$('#sp_d').value.trim();if(!d)return alert('Diga o que foi (ex: pizza).');const l=$('#sp_l').checked,dt=$('#sp_dt').value||today(),id=uid(),x={id,value:v,desc:d,date:dt,pay:$('#sp_p').value,who:$('#sp_w').value};
+    if(l){const mid=uid();x.lizId=mid;S.lizzieMoves.push({id:mid,type:'loan',value:v,desc:d,date:dt,who:d,due:$('#sp_due').value,ret:0,spendId:id})}
+    S.spends.push(x);save();render()}
+  else if(a==='spdel'){const x=S.spends.find(z=>z.id===el.dataset.id);if(!x)return;if(!confirm('Apagar esta saída?'+(x.lizId?' O empréstimo da Lizzie ligado a ela também será apagado.':'')))return;S.spends=S.spends.filter(z=>z.id!==x.id);if(x.lizId)S.lizzieMoves=S.lizzieMoves.filter(m=>m.id!==x.lizId);save();render()}
   else if(a==='lmdel'){S.lizzieMoves=S.lizzieMoves.filter(m=>m.id!==el.dataset.id);save();render()}
   else if(a==='rmadd'){const v=+$('#rm_v').value;if(!(v>0))return alert('Coloque o valor.');S.reserveMoves.push({id:uid(),type:$('#rm_t').value,value:v,desc:$('#rm_d').value,date:$('#rm_dt').value});save();render()}
   else if(a==='rmdel'){S.reserveMoves=S.reserveMoves.filter(m=>m.id!==el.dataset.id);save();render()}
@@ -848,6 +886,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('change',e=>{
   const el=e.target,a=el.dataset.act;
+  if(el.id==='sp_l'){const b=document.getElementById('sp_lx');if(b)b.style.display=el.checked?'block':'none';return}
   if(a==='paid'){const i=S.incomes.find(x=>x.id===el.dataset.i);i.allocs[+el.dataset.k].paid=el.checked;save();render()}
   else if(el.id==='lm_t')lmExtra();
   else if(a==='ldue'){const m=S.lizzieMoves.find(x=>x.id===el.dataset.id);if(m){m.due=el.value;save();render()}}
