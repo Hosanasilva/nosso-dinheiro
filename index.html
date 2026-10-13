@@ -157,7 +157,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-13T23:10:10Z';
+const BUILD='2026-10-13T23:39:46Z';
 let updAvail=false;
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
@@ -232,6 +232,7 @@ function migrate(){
   if(!Array.isArray(S.lizzieMoves))S.lizzieMoves=[];
   if(!Array.isArray(S.debts))S.debts=[];
   if(!Array.isArray(S.spends))S.spends=[];
+  if(!Array.isArray(S.shop))S.shop=[];
   if(!S.faturaPaid||typeof S.faturaPaid!=='object')S.faturaPaid={};
 }
 migrate();
@@ -706,6 +707,7 @@ function vLizzie(){
    <div><label>Data</label><input id="lm_dt" type="date" value="${today()}"></div></div>
    <button class="b" style="margin-top:12px;width:100%;padding:13px" data-act="lmadd">Adicionar</button></div>
   <div class="card"><label style="margin-top:0">Saldo mínimo até o fim do mês 🌱</label><input id="lmin" type="number" step="0.01" inputmode="decimal" value="${S.lizzieMin||''}" data-act="lmin"><label>Meta da Lizzie ⭐ (opcional)</label><input id="lgoal" type="number" step="0.01" inputmode="decimal" value="${g||''}" data-act="lgoal"></div>`;
+  h+=shopCard();
   const rrows=[];
   S.lizzieMoves.filter(isLoan).forEach(m=>{
     const rs=Array.isArray(m.rets)?m.rets:(+m.ret>0?[{id:'legacy',d:m.retDate||m.date,v:+m.ret}]:[]);
@@ -726,6 +728,24 @@ function vLizzie(){
   }
   return h;
 }
+
+const SHOPC={comida:['🥣','Introdução alimentar'],higiene:['🧴','Higiene e saúde'],roupa:['👗','Roupinhas'],outros:['✨','Outros']};
+const SHOPSUG=[['comida','Potinhos de vidro com tampa'],['comida','Colher de silicone'],['comida','Prato com ventosa'],['comida','Babador de silicone'],['comida','Copo de transição'],['comida','Cadeirinha de alimentação'],['comida','Frutas e legumes da semana'],['higiene','Fraldas'],['higiene','Lenço umedecido']];
+function shopCard(){
+  const L=S.shop,pend=L.filter(x=>!x.done),tot=sum(pend.map(x=>x.price||0));
+  let h=`<h2>Lista de compras 🛒</h2><div class="card">
+   <div class="mut" style="margin-bottom:6px">${pend.length?`${pend.length} para comprar${tot>0?` · previsto ${brl(tot)}`:''}`:'Nada pendente. Anote aqui o que precisa comprar para a Lizzie.'}</div>
+   <input id="sh_t" placeholder="Ex: potinhos de vidro, banana, fralda P">
+   <select id="sh_c" style="margin-top:8px">${Object.entries(SHOPC).map(([k,v])=>`<option value="${k}">${v[0]} ${v[1]}</option>`).join('')}</select>
+   <input id="sh_p" type="number" step="0.01" inputmode="decimal" placeholder="Preço (opcional)" style="margin-top:8px">
+   <button class="b" style="width:100%;margin-top:8px" data-act="shadd">Adicionar à lista</button>
+   <details style="margin-top:8px"><summary class="mut" style="cursor:pointer">Ideias para adicionar</summary><div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">${SHOPSUG.filter(sg=>!L.some(x=>x.text===sg[1]&&!x.done)).map(sg=>`<button class="b g sm" data-act="shsug" data-c="${sg[0]}" data-t="${esc(sg[1])}">+ ${esc(sg[1])}</button>`).join('')}</div></details></div>`;
+  Object.entries(SHOPC).forEach(([k,v])=>{
+    const it=L.filter(x=>x.cat===k||(!SHOPC[x.cat]&&k==='outros'));if(!it.length)return;
+    it.sort((a,b)=>(a.done?1:0)-(b.done?1:0));
+    h+=`<div class="card"><b>${v[0]} ${v[1]}</b>${it.map(x=>`<label class="alloc ${x.done?'paid':''}"><input type="checkbox" data-act="shtog" data-id="${x.id}" ${x.done?'checked':''}><span class="n">${esc(x.text)}</span><span class="v mut">${x.price>0?brl(x.price):''}</span><button class="b g sm" data-act="shdel" data-id="${x.id}" aria-label="Remover" style="padding:4px 8px">${ic('x',12)}</button></label>`).join('')}</div>`});
+  if(L.some(x=>x.done))h+=`<button class="b g sm" style="margin:0 0 8px" data-act="shclear">Limpar os já comprados</button>`;
+  return h}
 function donut(items){
   items=[...items].sort((a,b)=>b.v-a.v);
   const tot=sum(items.map(i=>i.v));if(!tot)return'<div class="empty">Sem dados neste mês.</div>';
@@ -913,6 +933,10 @@ document.addEventListener('click',e=>{
   else if(a==='xdel'){draft.extras.splice(+el.dataset.k,1);document.getElementById('extras').innerHTML=extrasHtml();if(!draft.manual)redist();else updLeft()}
   else if(a==='sumgo'){ym=el.dataset.m;tab='gr';render();scrollTo(0,document.body.scrollHeight)}
   else if(a==='dfill'){draft.debts[el.dataset.id]=+el.dataset.v;draft.manual=true;drawForm()}
+  else if(a==='shadd'){const t=$('#sh_t').value.trim();if(!t)return alert('Escreva o que precisa comprar.');S.shop.push({id:uid(),text:t,cat:$('#sh_c').value,price:+$('#sh_p').value||0,done:false});save();render()}
+  else if(a==='shsug'){S.shop.push({id:uid(),text:el.dataset.t,cat:el.dataset.c,price:0,done:false});save();render()}
+  else if(a==='shdel'){e.preventDefault();S.shop=S.shop.filter(x=>x.id!==el.dataset.id);save();render()}
+  else if(a==='shclear'){S.shop=S.shop.filter(x=>!x.done);save();render()}
   else if(a==='cadd'){S.cats.push({id:uid(),name:'Nova categoria',icon:'tag',pct:0});save();render()}
   else if(a==='cdel'){if(confirm('Remover categoria? Os lançamentos dela deixam de aparecer.')){S.cats=S.cats.filter(c=>c.id!==el.dataset.id);save();render()}}
   else if(a==='exp'){const b=new Blob([JSON.stringify(S)],{type:'application/json'});const l=document.createElement('a');l.href=URL.createObjectURL(b);l.download='nosso-dinheiro-backup.json';l.click()}
@@ -921,6 +945,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const el=e.target,a=el.dataset.act;
   if(el.id==='sp_p'){const l=document.getElementById('sp_lx'),c=document.getElementById('sp_cx');if(l)l.style.display=el.value==='lizzie'?'block':'none';if(c)c.style.display=el.value==='credito'?'block':'none';return}
+  if(a==='shtog'){const x=S.shop.find(z=>z.id===el.dataset.id);if(x){x.done=el.checked;save();render()}return}
   if(a==='paid'){const i=S.incomes.find(x=>x.id===el.dataset.i);i.allocs[+el.dataset.k].paid=el.checked;save();render()}
   else if(el.id==='lm_t')lmExtra();
   else if(a==='ldue'){const m=S.lizzieMoves.find(x=>x.id===el.dataset.id);if(m){m.due=el.value;save();render()}}
