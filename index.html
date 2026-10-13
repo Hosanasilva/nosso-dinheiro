@@ -157,7 +157,7 @@ wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3" y="8" width="18" 
 };
 const ICON_KEYS=['home','drop','cross','fuel','cart','heart','shield','card','smile','trend','tag','car','building','bag','bolt'];
 const ic=(n,z=18)=>`<svg class="ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||ICONS.tag}</svg>`;
-const BUILD='2026-10-13T22:33:23Z';
+const BUILD='2026-10-13T23:10:10Z';
 let updAvail=false;
 async function checkUpdate(manual){
   try{const r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const BUILD='([^']+)'/);
@@ -706,10 +706,17 @@ function vLizzie(){
    <div><label>Data</label><input id="lm_dt" type="date" value="${today()}"></div></div>
    <button class="b" style="margin-top:12px;width:100%;padding:13px" data-act="lmadd">Adicionar</button></div>
   <div class="card"><label style="margin-top:0">Saldo mínimo até o fim do mês 🌱</label><input id="lmin" type="number" step="0.01" inputmode="decimal" value="${S.lizzieMin||''}" data-act="lmin"><label>Meta da Lizzie ⭐ (opcional)</label><input id="lgoal" type="number" step="0.01" inputmode="decimal" value="${g||''}" data-act="lgoal"></div>`;
-  const mv=[...S.lizzieMoves].sort((a,b)=>b.date.localeCompare(a.date));
+  const rrows=[];
+  S.lizzieMoves.filter(isLoan).forEach(m=>{
+    const rs=Array.isArray(m.rets)?m.rets:(+m.ret>0?[{id:'legacy',d:m.retDate||m.date,v:+m.ret}]:[]);
+    rs.forEach(r=>rrows.push({isRet:1,date:r.d,value:r.v,m,rid:r.id,src:''}));
+    repAl(m.id).filter(a=>a.paid).forEach(a=>rrows.push({isRet:1,date:a.inc.date,value:a.value,m,rid:'',src:' · pela entrada de '+esc(a.inc.person)}))});
+  const mv=[...S.lizzieMoves,...rrows].sort((a,b)=>b.date.localeCompare(a.date)||(b.isRet?1:0)-(a.isRet?1:0));
   if(mv.length){
     h+=`<h2>Lançamentos 📒</h2>`;
     mv.forEach(m=>{
+      if(m.isRet){h+=`<div class="card lizmove"><span class="em">💜</span><div style="flex:1"><b>Voltou para a Lizzie</b><div class="mut">${fdate(m.date)} · ref. ${esc(m.m.who||m.m.desc||'empréstimo')}${m.src}</div></div>
+       <div style="text-align:right"><b class="good">+${brl(m.value)}</b>${m.rid?`<br><button class="b g sm" style="margin-top:4px" data-act="lrdel" data-id="${m.m.id}" data-r="${m.rid}" aria-label="Desfazer retorno">${ic('x',14)}</button>`:''}</div></div>`;return}
       const loan=isLoan(m),back=loan&&retOf(m)>0;
       const det=loan?` · ${m.type==='lent'?'a ':'para '}${esc(m.who||'—')}${m.due?' · previsto '+fdate(m.due):''}`:'';
       const st=loan?(m.value-retOf(m)<=0.004?` · voltou${m.retDate?' em '+fdate(m.retDate):''}`:back?` · já voltou ${brl(retOf(m))}`:''):'';
@@ -880,7 +887,8 @@ document.addEventListener('click',e=>{
   else if(a==='redist')redist();
   else if(a==='savef')saveForm();
   else if(a==='lmadd'){const v=+$('#lm_v').value;if(!(v>0))return alert('Coloque o valor.');const t=$('#lm_t').value,w=document.getElementById('lm_w'),du=document.getElementById('lm_due');if((t==='loan'||t==='lent')&&!(w&&w.value.trim()))return alert(t==='lent'?'Diga a quem você emprestou.':'Diga para que o dinheiro foi usado.');S.lizzieMoves.push({id:uid(),type:t,value:v,desc:$('#lm_d').value,date:$('#lm_dt').value,...((t==='loan'||t==='lent')?{who:w.value.trim(),due:du?du.value:'',ret:0}:{})});save();render()}
-  else if(a==='lret'){const m=S.lizzieMoves.find(x=>x.id===el.dataset.id);if(!m)return;const rem=m.value-retOf(m);const inp=prompt('Quanto voltou para a Lizzie? (R$)',String(Math.round(rem*100)/100).replace('.',','));if(inp===null)return;const v=parseFloat(String(inp).replace(',','.'));if(!(v>0))return;m.ret=Math.min(m.value,(+m.ret||0)+v);if(m.ret>=m.value-0.004)m.retDate=today();save();render()}
+  else if(a==='lret'){const m=S.lizzieMoves.find(x=>x.id===el.dataset.id);if(!m)return;const rem=m.value-retOf(m);const inp=prompt('Quanto voltou para a Lizzie? (R$)',String(Math.round(rem*100)/100).replace('.',','));if(inp===null)return;const v=parseFloat(String(inp).replace(',','.'));if(!(v>0))return;const add=Math.min(v,Math.max(0,m.value-retOf(m)));if(!(+m.rets&&0)&&!Array.isArray(m.rets)){m.rets=[];if(+m.ret>0)m.rets.push({id:uid(),d:m.retDate||m.date,v:+m.ret})}m.rets.push({id:uid(),d:today(),v:add});m.ret=(+m.ret||0)+add;if(retOf(m)>=m.value-0.004)m.retDate=today();save();render()}
+  else if(a==='lrdel'){const m=S.lizzieMoves.find(x=>x.id===el.dataset.id);if(!m||!confirm('Desfazer este retorno? O valor volta a ficar como emprestado.'))return;let rs=Array.isArray(m.rets)?m.rets:(+m.ret>0?[{id:'legacy',d:m.retDate||m.date,v:+m.ret}]:[]);const r=rs.find(x=>x.id===el.dataset.r);if(!r)return;rs=rs.filter(x=>x.id!==r.id);m.rets=rs;m.ret=Math.max(0,(+m.ret||0)-r.v);if(retOf(m)<m.value-0.004)delete m.retDate;save();render()}
   else if(a==='spadd'){const v=+$('#sp_v').value;if(!(v>0))return alert('Coloque o valor.');const d=$('#sp_d').value.trim();if(!d)return alert('Diga o que foi (ex: pizza).');const pay=$('#sp_p').value,dt=$('#sp_dt').value||today(),id=uid(),x={id,value:v,desc:d,date:dt,pay,who:$('#sp_w').value};
     if(pay==='credito'){const fd=$('#sp_fd').value;if(!fd)return alert('Coloque a data de vencimento da fatura.');x.due=fd;x.n=Math.max(1,Math.round(+$('#sp_n').value)||1);S.cardDay=+fd.slice(8,10)}
     if(pay==='lizzie'){const mid=uid();x.lizId=mid;S.lizzieMoves.push({id:mid,type:'loan',value:v,desc:d,date:dt,who:d,due:$('#sp_due').value,ret:0,spendId:id})}
